@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-[#FDF2E9] text-black">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InOutSold! - Inventory Management System</title>
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Outfit:wght@500;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Gridstack.js Stylesheet -->
+    <link href="https://cdn.jsdelivr.net/npm/gridstack@10.0.1/dist/gridstack.min.css" rel="stylesheet"/>
+    
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        outfit: ['Outfit', 'sans-serif'],
+                    },
+                    animation: {
+                        'pulse-subtle': 'pulseSubtle 1.5s infinite',
+                    },
+                    keyframes: {
+                        pulseSubtle: {
+                            '0%, 100%': { opacity: 1 },
+                            '50%': { opacity: .4 },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Gridstack.js Core and Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/gridstack@10.0.1/dist/gridstack-all.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        /* Neubrutalist Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #FDF2E9;
+            border-left: 2px solid #000;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #000;
+            border: 2px solid #FDF2E9;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #27272a;
+        }
+        
+        /* Custom styles for dialogs backdrop */
+        dialog::backdrop {
+            background-color: rgba(253, 242, 233, 0.85);
+            border: none;
+        }
+        dialog[open] {
+            animation: bounceIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes bounceIn {
+            from { transform: scale(0.9) translateY(20px); opacity: 0; }
+            to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        /* Neubrutalist Gridstack Drag & Drop Styles */
+        .grid-stack {
+            background: transparent;
+        }
+        .grid-stack-placeholder > .placeholder-content {
+            border: 3px dashed #000 !important;
+            background-color: #fef08a !important; /* yellow-200 */
+            opacity: 1 !important;
+            box-shadow: none !important;
+        }
+        /* Ensure Gridstack handles dragging styles correctly while preserving Neubrutalist details */
+        .grid-stack-item-moving > .grid-stack-item-content {
+            opacity: 0.95;
+            border: 4px solid #000 !important;
+            box-shadow: 8px 8px 0px 0px rgba(0,0,0,1) !important;
+            background-color: #fff !important;
+        }
+    </style>
+</head>
+<body class="h-full font-sans antialiased bg-[#FDF2E9] text-black selection:bg-black selection:text-white flex flex-col font-bold">
+
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-40 border-b-4 border-black bg-white">
+        <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row md:h-24 items-center justify-between gap-4 py-4 md:py-0 w-full">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-11 w-11 items-center justify-center border-2 border-black bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <i data-lucide="package-open" class="h-6 w-6"></i>
+                    </div>
+                    <div>
+                        <span class="font-outfit text-2xl font-black tracking-tight text-black">InOutSold!</span>
+                    </div>
+                </div>
+                <!-- Stack actions on mobile, layout row on desktop -->
+                <div class="flex flex-wrap items-center justify-center md:justify-end gap-2 w-full md:w-auto">
+                    <!-- Internationalization switcher -->
+                    <button id="lang-switcher-btn" onclick="toggleLanguage()" class="inline-flex items-center justify-center gap-1.5 border-2 border-black bg-white px-2 py-1 text-xs md:text-sm md:px-4 md:py-2 font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-50 transition-all min-h-[48px] h-12 w-auto">
+                        English (EN)
+                    </button>
+                    <!-- Edit Mode toggle button -->
+                    <button id="edit-mode-btn" onclick="toggleEditMode()" title="Toggle Edit Mode" aria-label="Toggle Edit Mode" class="inline-flex items-center justify-center gap-1.5 border-2 border-black bg-white px-2 py-1 text-xs md:text-sm md:px-4 md:py-2 font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-50 transition-all min-h-[48px] h-12 w-12 md:w-auto">
+                        <i id="edit-mode-icon" data-lucide="lock" class="h-4 w-4"></i>
+                        <span id="edit-mode-text" class="hidden md:inline">Edit: Locked</span>
+                    </button>
+                    <button onclick="exportData()" title="Export Data" aria-label="Export Data" class="inline-flex items-center justify-center gap-1.5 border-2 border-black bg-white px-2 py-1 text-xs md:text-sm md:px-4 md:py-2 font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-50 transition-all min-h-[48px] h-12 w-12 md:w-auto">
+                        <i data-lucide="download" class="h-4 w-4"></i>
+                        <span data-i18n="export_data" class="hidden md:inline">Export Data</span>
+                    </button>
+                    <button onclick="resetData()" title="Reset Mock Data" aria-label="Reset Mock Data" class="inline-flex items-center justify-center gap-1.5 border-2 border-black bg-red-400 px-2 py-1 text-xs md:text-sm md:px-4 md:py-2 font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-red-500 transition-all min-h-[48px] h-12 w-12 md:w-auto">
+                        <i data-lucide="refresh-cw" class="h-4 w-4"></i>
+                        <span data-i18n="reset_mock_data" class="hidden md:inline">Reset Mock Data</span>
+                    </button>
+                    <!-- Logout button -->
+                    <button id="logout-btn" onclick="handleLogout()" title="Log Out" aria-label="Log Out" class="inline-flex items-center justify-center gap-1.5 border-2 border-black bg-zinc-200 px-2 py-1 text-xs md:text-sm md:px-4 md:py-2 font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-300 transition-all min-h-[48px] h-12 w-12 md:w-auto hidden">
+                        <i data-lucide="log-out" class="h-4 w-4"></i>
+                        <span class="hidden md:inline">Log Out</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+        <!-- KPI Cards Grid: 1 column on mobile, 2 columns on tablets, 4 columns on large screens -->
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+            <!-- KPI 1: Unique Products -->
+            <div class="relative overflow-hidden bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                <div class="flex items-center justify-between">
+                    <div class="text-left">
+                        <p data-i18n="kpi_total_products" class="text-xs font-black text-zinc-700 uppercase tracking-wider">Total Products</p>
+                        <h3 id="kpi-total-skus" class="mt-2 text-3xl font-black font-outfit text-black">0</h3>
+                    </div>
+                    <div class="border-2 border-black bg-blue-300 p-3 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <i data-lucide="layers" class="h-6 w-6"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-xs text-zinc-500 text-left">
+                    <span data-i18n="kpi_total_products_sub">Unique SKUs registered</span>
+                </div>
+            </div>
+
+            <!-- KPI 2: Total Quantity -->
+            <div class="relative overflow-hidden bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                <div class="flex items-center justify-between">
+                    <div class="text-left">
+                        <p data-i18n="kpi_total_stock" class="text-xs font-black text-zinc-700 uppercase tracking-wider">Total Stock Items</p>
+                        <h3 id="kpi-total-stock" class="mt-2 text-3xl font-black font-outfit text-black">0</h3>
+                    </div>
+                    <div class="border-2 border-black bg-purple-300 p-3 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <i data-lucide="box" class="h-6 w-6"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-xs text-zinc-500 text-left">
+                    <span data-i18n="kpi_total_stock_sub">Accumulated unit count</span>
+                </div>
+            </div>
+
+            <!-- KPI 3: Low Stock Alerts -->
+            <div id="kpi-card-low-stock" class="relative overflow-hidden bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all duration-300">
+                <div class="flex items-center justify-between">
+                    <div class="text-left">
+                        <p data-i18n="kpi_low_stock" class="text-xs font-black text-zinc-700 uppercase tracking-wider">Low Stock Alerts</p>
+                        <h3 id="kpi-low-stock-count" class="mt-2 text-3xl font-black font-outfit text-black">0</h3>
+                    </div>
+                    <div id="kpi-icon-low-stock" class="border-2 border-black bg-zinc-100 p-3 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <i data-lucide="alert-triangle" class="h-6 w-6"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-xs text-zinc-500 text-left">
+                    <span data-i18n="kpi_low_stock_sub">Products with quantity &lt; 5</span>
+                </div>
+            </div>
+
+            <!-- KPI 4: Total Revenue -->
+            <div class="relative overflow-hidden bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                <div class="flex items-center justify-between">
+                    <div class="text-left">
+                        <p data-i18n="kpi_total_revenue" class="text-xs font-black text-zinc-700 uppercase tracking-wider">Total Revenue</p>
+                        <h3 id="kpi-total-revenue" class="mt-2 text-3xl font-black font-outfit text-black">$0.00</h3>
+                    </div>
+                    <div class="border-2 border-black bg-emerald-300 p-3 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <i data-lucide="dollar-sign" class="h-6 w-6"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-xs text-zinc-500 text-left">
+                    <span data-i18n="kpi_total_revenue_sub">Calculated from POS sales</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace Area: Neubrutalist Gridstack Container -->
+        <div class="grid-stack mt-4">
+            
+            <!-- Item 1: Inventory Dashboard Table Card -->
+            <div class="grid-stack-item" gs-id="inventory-card" gs-min-w="6" gs-min-h="4">
+                <div class="grid-stack-item-content bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col h-full overflow-hidden">
+                    <!-- Neubrutalist Drag Handle header bar -->
+                    <div class="grid-drag-handle cursor-grab border-b-2 border-black bg-yellow-300 p-2 text-xs font-black uppercase text-center select-none flex items-center justify-center gap-1.5 hover:bg-yellow-400 transition-colors">
+                        <i data-lucide="grip-horizontal" class="h-4 w-4"></i>
+                        <span data-i18n="drag_handle">Drag Header to Reposition Card</span>
+                    </div>
+                    <!-- Table Actions & Header -->
+                    <div class="p-6 border-b-4 border-black flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-zinc-50">
+                        <div class="text-left">
+                            <h2 data-i18n="inventory_dashboard" class="text-xl font-black font-outfit text-black">Inventory Dashboard</h2>
+                            <p data-i18n="inventory_sub" class="text-sm text-zinc-600 mt-1">Monitor, search, and manage products and stock counts.</p>
+                        </div>
+                        <div class="flex items-center gap-3 w-full sm:w-auto">
+                            <button onclick="openInboundModal()" class="inline-flex items-center justify-center gap-1.5 border-2 border-dashed border-black bg-white px-4 py-2 text-sm font-bold text-black hover:bg-zinc-50 shadow-none transition-all min-h-[48px] h-12 w-full sm:w-auto">
+                                <i data-lucide="plus-circle" class="h-4.5 w-4.5"></i>
+                                <span data-i18n="inbound_stock_btn">[+] Inbound Stock</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter / Search Box -->
+                    <div class="px-6 py-4 border-b-2 border-black bg-zinc-50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div class="relative flex-1 text-left w-full">
+                            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-black">
+                                <i data-lucide="search" class="h-4 w-4"></i>
+                            </div>
+                            <input type="text" id="search-input" oninput="renderDashboard()" data-i18n-placeholder="search_placeholder" placeholder="Search by SKU or name..." class="w-full bg-white border-2 border-black py-2 pl-9 pr-4 text-sm text-black placeholder-zinc-500 focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                        </div>
+                        <!-- Filter buttons grow/fill on small devices -->
+                        <div class="flex flex-wrap gap-2 w-full lg:w-auto">
+                            <button onclick="setFilter('all')" id="filter-btn-all" data-i18n="filter_all" class="px-3 py-1.5 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex-1 sm:flex-none flex items-center justify-center">All</button>
+                            <button onclick="setFilter('in-stock')" id="filter-btn-in-stock" data-i18n="filter_in_stock" class="px-3 py-1.5 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-50 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex-1 sm:flex-none flex items-center justify-center">In Stock</button>
+                            <button onclick="setFilter('low-stock')" id="filter-btn-low-stock" data-i18n="filter_low_stock" class="px-3 py-1.5 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-50 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex-1 sm:flex-none flex items-center justify-center">Low Stock</button>
+                            <button onclick="setFilter('out-of-stock')" id="filter-btn-out-of-stock" data-i18n="filter_out_of_stock" class="px-3 py-1.5 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-50 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex-1 sm:flex-none flex items-center justify-center">Out of Stock</button>
+                        </div>
+                    </div>
+
+                    <!-- Inventory Table Content: overflow-x-auto prevents breaks on mobile -->
+                    <div class="overflow-x-auto overflow-y-auto flex-1 w-full">
+                        <table class="w-full text-left border-collapse min-w-[600px]">
+                            <thead>
+                                <tr class="border-b-4 border-black bg-zinc-100 text-black text-xs font-black uppercase tracking-wider sticky top-0 z-10">
+                                    <th data-i18n="th_product_details" class="py-3 px-6 border-r-2 border-black">Product Details</th>
+                                    <th data-i18n="th_price" class="py-3 px-6 text-right border-r-2 border-black">Price</th>
+                                    <th data-i18n="th_stock" class="py-3 px-6 text-center border-r-2 border-black">Stock</th>
+                                    <th data-i18n="th_threshold" class="py-3 px-6 text-center border-r-2 border-black">Threshold</th>
+                                    <th data-i18n="th_status" class="py-3 px-6 text-center border-r-2 border-black">Status</th>
+                                    <th data-i18n="th_actions" class="py-3 px-6 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-table-body" class="divide-y-2 divide-black bg-white">
+                                <!-- Rendered dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Item 2: POS Checkout Card -->
+            <div class="grid-stack-item" gs-id="pos-card" gs-min-w="3" gs-min-h="3">
+                <div class="grid-stack-item-content bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col h-full overflow-y-auto">
+                    <!-- Drag Handle Bar -->
+                    <div class="grid-drag-handle cursor-grab border-b-2 border-black bg-yellow-300 p-2 text-xs font-black uppercase text-center select-none flex items-center justify-center gap-1.5 hover:bg-yellow-400 transition-colors -mt-6 -mx-6 mb-4">
+                        <i data-lucide="grip-horizontal" class="h-4 w-4"></i>
+                        <span data-i18n="drag_handle">Drag Header to Reposition Card</span>
+                    </div>
+                    <div class="flex items-center justify-between mb-4 pb-4 border-b-2 border-black">
+                        <div class="flex items-center gap-2">
+                            <div class="border-2 border-black bg-yellow-300 p-2 text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                                <i data-lucide="shopping-cart" class="h-5 w-5"></i>
+                            </div>
+                            <h2 data-i18n="pos_checkout" class="text-lg font-black font-outfit text-black">POS Checkout</h2>
+                        </div>
+                        <span data-i18n="pos_quick_sale" class="text-xs text-zinc-500 font-extrabold">Quick Sale</span>
+                    </div>
+
+                    <form id="pos-form" onsubmit="handlePOSCheckout(event)" class="space-y-4 text-left flex-1 flex flex-col justify-between">
+                        <div class="space-y-4">
+                            <!-- Product selector -->
+                            <div>
+                                <label data-i18n="pos_select_product" for="pos-product" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Select Product</label>
+                                <select id="pos-product" onchange="onPOSProductChange()" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                                    <option value="" disabled selected data-i18n="pos_choose_product">Choose a product...</option>
+                                    <!-- Populate dynamically -->
+                                </select>
+                            </div>
+
+                            <!-- Price display & quantity inputs -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label data-i18n="pos_unit_price" for="pos-price" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Unit Price ($)</label>
+                                    <input type="number" id="pos-price" min="0" step="0.01" required class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                                </div>
+                                <div>
+                                    <label data-i18n="pos_qty" for="pos-quantity" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Qty to Sell</label>
+                                    <input type="number" id="pos-quantity" min="1" required oninput="calculatePOSTotal()" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                                </div>
+                            </div>
+
+                            <!-- Live Calculations -->
+                            <div id="pos-calc-box" class="bg-yellow-100 border-2 border-black p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between text-sm hidden">
+                                <div class="space-y-0.5 text-left">
+                                    <span data-i18n="pos_avail_stock" class="text-zinc-700">Available Stock:</span>
+                                    <div id="pos-available-stock" class="font-extrabold text-black">0</div>
+                                </div>
+                                <div class="text-right space-y-0.5">
+                                    <span data-i18n="pos_subtotal" class="text-zinc-700">Subtotal:</span>
+                                    <div id="pos-subtotal-val" class="text-xl font-black font-outfit text-black">$0.00</div>
+                                </div>
+                            </div>
+
+                            <!-- Error Message Alert -->
+                            <div id="pos-error" class="hidden bg-red-100 border-2 border-black p-3 text-xs text-black flex items-start gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                <i data-lucide="alert-circle" class="h-4 w-4 mt-0.5 shrink-0 text-red-600"></i>
+                                <span id="pos-error-text" class="font-bold">Insufficient stock.</span>
+                            </div>
+                        </div>
+
+                        <!-- POS Submit button -->
+                        <button type="submit" class="w-full bg-black text-white border-2 border-black font-extrabold px-4 py-2.5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none hover:bg-zinc-900 transition-all flex items-center justify-center gap-1.5 mt-4 min-h-[48px] h-12">
+                            <i data-lucide="check-circle-2" class="h-4.5 w-4.5"></i>
+                            <span data-i18n="pos_complete_checkout">/// Complete Checkout</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Item 3: Recent Activity Card -->
+            <div class="grid-stack-item" gs-id="activity-card" gs-min-w="3" gs-min-h="3">
+                <div class="grid-stack-item-content bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col h-full overflow-hidden">
+                    <!-- Drag Handle Bar -->
+                    <div class="grid-drag-handle cursor-grab border-b-2 border-black bg-yellow-300 p-2 text-xs font-black uppercase text-center select-none flex items-center justify-center gap-1.5 hover:bg-yellow-400 transition-colors -mt-6 -mx-6 mb-4">
+                        <i data-lucide="grip-horizontal" class="h-4 w-4"></i>
+                        <span data-i18n="drag_handle">Drag Header to Reposition Card</span>
+                    </div>
+                    <div class="flex items-center justify-between mb-4 pb-4 border-b-2 border-black">
+                        <div class="flex items-center gap-2">
+                            <div class="border-2 border-black bg-zinc-100 p-2 text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                                <i data-lucide="history" class="h-5 w-5"></i>
+                            </div>
+                            <h2 data-i18n="recent_activity" class="text-lg font-black font-outfit text-black">Recent Activity</h2>
+                        </div>
+                    </div>
+
+                    <!-- Activity List -->
+                    <div id="transaction-log" class="flex-1 divide-y-2 divide-black overflow-y-auto space-y-3 pr-1 text-left">
+                        <!-- Loaded dynamically by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Inbound Stock Dialog (Modal) -->
+    <dialog id="inbound-dialog" class="bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 max-w-md w-full focus:outline-none">
+        <div class="flex flex-col">
+            <!-- Modal Header -->
+            <div class="p-6 border-b-2 border-black flex items-center justify-between bg-zinc-50">
+                <div class="flex items-center gap-2">
+                    <div class="border-2 border-black bg-blue-300 p-2 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <i data-lucide="plus-circle" class="h-5 w-5"></i>
+                    </div>
+                    <h3 data-i18n="inbound_title" class="text-lg font-black font-outfit text-black">Inbound Stock Entry</h3>
+                </div>
+                <!-- Delete/Remove Icon: Black background, white 'x', hard shadow, min-h-[48px] target -->
+                <button onclick="closeInboundModal()" class="bg-black text-white border-2 border-black px-2 py-1 text-xs font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none hover:bg-zinc-900 transition-all min-h-[48px] min-w-[48px] flex items-center justify-center">
+                    X
+                </button>
+            </div>
+
+            <!-- Modal Content Form -->
+            <form id="inbound-form" onsubmit="handleInboundSubmit(event)" class="p-6 space-y-4 text-left">
+                
+                <!-- Stocking Mode Switch -->
+                <div class="flex border-2 border-black bg-zinc-100 p-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <button type="button" onclick="setInboundMode('existing')" id="inbound-mode-existing" data-i18n="mode_existing" class="flex-1 py-1.5 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center">
+                        Existing Product
+                    </button>
+                    <button type="button" onclick="setInboundMode('new')" id="inbound-mode-new" data-i18n="mode_new" class="flex-1 py-1.5 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center">
+                        New Product
+                    </button>
+                </div>
+
+                <!-- Existing SKU Selection Row -->
+                <div id="inbound-row-existing">
+                    <label data-i18n="lbl_select_sku" for="inbound-sku-select" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Select Product SKU</label>
+                    <select id="inbound-sku-select" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                        <option value="" disabled selected data-i18n="opt_select_sku">Select SKU...</option>
+                        <!-- Populate dynamically -->
+                    </select>
+                </div>
+
+                <!-- Brand New Product Fields (Visible in 'new' mode) -->
+                <div id="inbound-new-fields" class="hidden space-y-4">
+                    <!-- Stack inputs on mobile, inline rows on desktop -->
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <div class="flex-1">
+                            <label data-i18n="lbl_sku_id" for="inbound-sku-input" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">SKU ID</label>
+                            <input type="text" id="inbound-sku-input" placeholder="e.g. TS-VIB-01" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                        </div>
+                        <div class="flex-1">
+                            <label data-i18n="lbl_name" for="inbound-name-input" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Product Name</label>
+                            <input type="text" id="inbound-name-input" placeholder="e.g. Velvet Hoodie" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                        </div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <div class="flex-1">
+                            <label data-i18n="lbl_unit_price" for="inbound-price-input" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Unit Price ($)</label>
+                            <input type="number" id="inbound-price-input" min="0" step="0.01" placeholder="25.00" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                        </div>
+                        <div class="flex-1">
+                            <label data-i18n="lbl_low_stock_level" for="inbound-threshold-input" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Low-Stock Level</label>
+                            <input type="number" id="inbound-threshold-input" min="0" value="5" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quantity Row (Applies to both modes) -->
+                <div>
+                    <label data-i18n="lbl_qty_to_add" for="inbound-quantity" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Quantity to Add</label>
+                    <input type="number" id="inbound-quantity" min="1" required placeholder="Quantity" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                </div>
+
+                <!-- Error Alert in Modal -->
+                <div id="inbound-error" class="hidden bg-red-100 border-2 border-black p-3 text-xs text-black flex items-start gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <i data-lucide="alert-circle" class="h-4 w-4 mt-0.5 shrink-0 text-red-600"></i>
+                    <span id="inbound-error-text" class="font-bold">Please fill out all product details.</span>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="pt-4 border-t-2 border-black flex justify-end gap-3 bg-zinc-50 p-4 -mx-6 -mb-6">
+                    <button type="button" onclick="closeInboundModal()" data-i18n="btn_cancel" class="border-2 border-black bg-white px-4 py-2 text-sm font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-50 transition-all min-h-[48px] h-12">
+                        Cancel
+                    </button>
+                    <!-- Primary action: bg-black, white text, shadow 6px, prefixed with /// -->
+                    <button type="submit" class="bg-black text-white border-2 border-black px-4 py-2 text-sm font-extrabold shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none hover:bg-zinc-900 transition-all min-h-[48px] h-12">
+                        <span data-i18n="btn_save_stock">/// Save Stock</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Vanilla Javascript Logic -->
+    <script>
+        // API Base URL - Uses relative paths for same-domain deployment
+        const API_BASE = '';
+
+        // i18n Translation dictionary
+        const i18n = {
+            'en': {
+                brand_badge: 'Grid Customizable',
+                export_data: 'Export Data',
+                reset_mock_data: 'Reset Mock Data',
+                edit_mode_locked: 'Edit: Locked',
+                edit_mode_active: '/// Edit: Active',
+                kpi_total_products: 'Total Products',
+                kpi_total_products_sub: 'Unique SKUs registered',
+                kpi_total_stock: 'Total Stock Items',
+                kpi_total_stock_sub: 'Accumulated unit count',
+                kpi_low_stock: 'Low Stock Alerts',
+                kpi_low_stock_sub: 'Products with quantity < 5',
+                kpi_total_revenue: 'Total Revenue',
+                kpi_total_revenue_sub: 'Calculated from POS sales',
+                drag_handle: 'Drag Header to Reposition Card',
+                inventory_dashboard: 'Inventory Dashboard',
+                inventory_sub: 'Monitor, search, and manage products and stock counts.',
+                inbound_stock_btn: '[+] Inbound Stock',
+                search_placeholder: 'Search by SKU or name...',
+                filter_all: 'All',
+                filter_in_stock: 'In Stock',
+                filter_low_stock: 'Low Stock',
+                filter_out_of_stock: 'Out of Stock',
+                th_product_details: 'Product Details',
+                th_price: 'Price',
+                th_stock: 'Stock',
+                th_threshold: 'Threshold',
+                th_status: 'Status',
+                th_actions: 'Actions',
+                badge_in_stock: 'In Stock',
+                badge_low_stock: 'Low Stock',
+                badge_out_of_stock: 'Out of Stock',
+                tooltip_quick_add: 'Quick Add Stock',
+                tooltip_quick_pos: 'Quick POS Checkout',
+                pos_checkout: 'POS Checkout',
+                pos_quick_sale: 'Quick Sale',
+                pos_select_product: 'Select Product',
+                pos_choose_product: 'Choose a product...',
+                pos_unit_price: 'Unit Price ($)',
+                pos_qty: 'Qty to Sell',
+                pos_avail_stock: 'Available Stock:',
+                pos_subtotal: 'Subtotal:',
+                pos_insufficient_stock: 'Insufficient stock.',
+                pos_complete_checkout: '/// Complete Checkout',
+                recent_activity: 'Recent Activity',
+                tx_badge_inbound: 'INBOUND',
+                tx_badge_sale: 'SALE',
+                tx_no_logs: 'No transaction logs recorded yet.',
+                inbound_title: 'Inbound Stock Entry',
+                mode_existing: 'Existing Product',
+                mode_new: 'New Product',
+                lbl_select_sku: 'Select Product SKU',
+                opt_select_sku: 'Select SKU...',
+                lbl_sku_id: 'SKU ID',
+                lbl_name: 'Product Name',
+                lbl_unit_price: 'Unit Price ($)',
+                lbl_low_stock_level: 'Low-Stock Level',
+                lbl_qty_to_add: 'Quantity to Add',
+                btn_cancel: 'Cancel',
+                btn_save_stock: '/// Save Stock',
+                confirm_title: 'Are you sure?',
+                confirm_reset_msg: 'Reset database AND dashboard layout to original defaults?',
+                btn_confirm: 'Confirm',
+                msg_reset_success: 'Database reset completed successfully.',
+                msg_reset_failed: 'Reset failed: ',
+                msg_export_failed: 'Export failed: ',
+                msg_sale_success: 'Sale recorded successfully! Total: ',
+                msg_invalid_inbound_qty: 'Please provide a valid stocking quantity.',
+                msg_select_sku_err: 'Please select a product SKU.',
+                msg_invalid_new_fields: 'Please specify a valid SKU, product name, and positive price.',
+                msg_backend_fail: 'Failed to connect to FastAPI backend. Ensure the backend server is running.',
+                msg_pos_select_err: 'Please select a product to check out.',
+                msg_pos_positive_qty: 'Please specify a positive sale quantity.',
+                msg_pos_valid_price: 'Please specify a valid sale price.'
+            },
+            'zh-tw': {
+                brand_badge: '網格自訂',
+                export_data: '匯出資料',
+                reset_mock_data: '重設模擬資料',
+                edit_mode_locked: '編輯：已鎖定',
+                edit_mode_active: '/// 編輯：進行中',
+                kpi_total_products: '產品總數',
+                kpi_total_products_sub: '已註冊的獨特 SKU 數量',
+                kpi_total_stock: '庫存商品總數',
+                kpi_total_stock_sub: '累計庫存商品件數',
+                kpi_low_stock: '低庫存警報',
+                kpi_low_stock_sub: '庫存數量小於 5 的產品',
+                kpi_total_revenue: '總營收',
+                kpi_total_revenue_sub: '由 POS 銷售額累計計算',
+                drag_handle: '拖拽標題以調整卡片位置',
+                inventory_dashboard: '庫存儀表板',
+                inventory_sub: '監控、搜尋及管理產品與實體庫存數量。',
+                inbound_stock_btn: '[+] 入庫登記',
+                search_placeholder: '搜尋 SKU 或名稱...',
+                filter_all: '全部',
+                filter_in_stock: '有庫存',
+                filter_low_stock: '低庫存',
+                filter_out_of_stock: '無庫存',
+                th_product_details: '產品詳情',
+                th_price: '價格',
+                th_stock: '庫存',
+                th_threshold: '警報門檻',
+                th_status: '狀態',
+                th_actions: '操作',
+                badge_in_stock: '有庫存',
+                badge_low_stock: '低庫存',
+                badge_out_of_stock: '無庫存',
+                tooltip_quick_add: '快速加入庫存',
+                tooltip_quick_pos: '快速 POS 結帳',
+                pos_checkout: 'POS 結帳',
+                pos_quick_sale: '快速銷售',
+                pos_select_product: '選擇產品',
+                pos_choose_product: '選擇產品...',
+                pos_unit_price: '單價 ($)',
+                pos_qty: '銷售數量',
+                pos_avail_stock: '可用庫存：',
+                pos_subtotal: '小計：',
+                pos_insufficient_stock: '庫存不足。',
+                pos_complete_checkout: '/// 完成結帳',
+                recent_activity: '最近活動',
+                tx_badge_inbound: '入庫',
+                tx_badge_sale: '銷售',
+                tx_no_logs: '尚無交易記錄。',
+                inbound_title: '入庫登記填報',
+                mode_existing: '已有產品',
+                mode_new: '新產品',
+                lbl_select_sku: '選擇產品 SKU',
+                opt_select_sku: '選擇 SKU...',
+                lbl_sku_id: 'SKU 編號',
+                lbl_name: '產品名稱',
+                lbl_unit_price: '單價 ($)',
+                lbl_low_stock_level: '低庫存門檻',
+                lbl_qty_to_add: '入庫數量',
+                btn_cancel: '取消',
+                btn_save_stock: '/// 儲存庫存',
+                confirm_title: '您確定嗎？',
+                confirm_reset_msg: '重設資料庫與儀表板佈局至原始預設值？',
+                btn_confirm: '確認',
+                msg_reset_success: '資料庫重設成功。',
+                msg_reset_failed: '重設失敗：',
+                msg_export_failed: '匯出失敗：',
+                msg_sale_success: '銷售記錄成功！總額：',
+                msg_invalid_inbound_qty: '請輸入有效的入庫數量。',
+                msg_select_sku_err: '請選擇產品 SKU。',
+                msg_invalid_new_fields: '請輸入有效的 SKU、產品名稱與正數單價。',
+                msg_backend_fail: '無法連線至 FastAPI 後端。請確保後端伺服器正在運行。',
+                msg_pos_select_err: '請選擇產品進行結帳。',
+                msg_pos_positive_qty: '請指定正數銷售數量。',
+                msg_pos_valid_price: '請指定有效的銷售價格。'
+            }
+        };
+
+        let products = [];
+        let transactions = [];
+        let filterMode = 'all'; 
+        let inboundMode = 'existing';
+        
+        let currentLang = localStorage.getItem('vibe_lang') || 'en';
+        let editMode = localStorage.getItem('vibe_edit_mode') === 'true'; 
+        let grid;
+        let authMode = 'login'; // 'login' or 'register'
+
+        // Default Gridstack layout
+        const defaultLayout = [
+            { id: 'inventory-card', x: 0, y: 0, w: 8, h: 6 },
+            { id: 'pos-card', x: 8, y: 0, w: 4, h: 3 },
+            { id: 'activity-card', x: 8, y: 3, w: 4, h: 3 }
+        ];
+
+        // Translation retriever helper
+        function t(key) {
+            return i18n[currentLang][key] || key;
+        }
+
+        // Language Switcher Trigger
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'zh-tw' : 'en';
+            updateLanguage();
+        }
+
+        // Apply translations statically
+        function updateLanguage() {
+            localStorage.setItem('vibe_lang', currentLang);
+
+            // Switcher button text
+            const switcher = document.getElementById('lang-switcher-btn');
+            switcher.textContent = currentLang === 'en' ? '繁中 (ZH-TW)' : 'English (EN)';
+
+            // Element texts
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (i18n[currentLang][key]) {
+                    el.textContent = i18n[currentLang][key];
+                }
+            });
+
+            // Input placeholders
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (i18n[currentLang][key]) {
+                    el.setAttribute('placeholder', i18n[currentLang][key]);
+                }
+            });
+
+            // Re-sync components
+            renderInventoryTable();
+            renderRecentTransactionsList();
+            populateSelectors();
+            applyEditMode();
+        }
+
+        // Edit Mode Toggle trigger
+        function toggleEditMode() {
+            editMode = !editMode;
+            localStorage.setItem('vibe_edit_mode', editMode);
+            applyEditMode();
+        }
+
+        // Apply grid edit mode permissions & styling
+        function applyEditMode() {
+            const btn = document.getElementById('edit-mode-btn');
+            const btnText = document.getElementById('edit-mode-text');
+            const btnIcon = document.getElementById('edit-mode-icon');
+            
+            if (editMode) {
+                if (btnText) btnText.textContent = t('edit_mode_active');
+                if (btnIcon) {
+                    btnIcon.setAttribute('data-lucide', 'unlock');
+                    lucide.createIcons();
+                }
+                btn.className = "inline-flex items-center justify-center gap-1.5 border-2 border-black bg-black px-2 py-1 text-xs md:text-sm md:px-4 md:py-2 font-bold text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-900 transition-all min-h-[48px] h-12 w-12 md:w-auto";
+                if (grid) {
+                    grid.enable();
+                }
+                document.querySelectorAll('.grid-drag-handle').forEach(el => el.classList.remove('hidden'));
+            } else {
+                if (btnText) btnText.textContent = t('edit_mode_locked');
+                if (btnIcon) {
+                    btnIcon.setAttribute('data-lucide', 'lock');
+                    lucide.createIcons();
+                }
+                btn.className = "inline-flex items-center justify-center gap-1.5 border-2 border-black bg-white px-2 py-1 text-xs md:text-sm md:px-4 md:py-2 font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-50 transition-all min-h-[48px] h-12 w-12 md:w-auto";
+                if (grid) {
+                    grid.disable();
+                }
+                document.querySelectorAll('.grid-drag-handle').forEach(el => el.classList.add('hidden'));
+            }
+        }
+
+        // Async helper for API requests
+        async function apiRequest(endpoint, options = {}) {
+            const url = `${API_BASE}${endpoint}`;
+            
+            // Insert Authorization Header automatically
+            const token = localStorage.getItem('vibe_token');
+            if (token) {
+                if (!options.headers) {
+                    options.headers = {};
+                }
+                options.headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(url, options);
+            if (response.status === 401) {
+                // Token has expired or is invalid: clear and force re-login
+                localStorage.removeItem('vibe_token');
+                localStorage.removeItem('vibe_username');
+                checkAuth();
+                throw new Error("Session expired. Please log in again.");
+            }
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({ detail: "Unknown server error occurred." }));
+                throw new Error(errData.detail || "Server error.");
+            }
+            return response.json();
+        }
+
+        // Initialize state and load from server
+        async function initData() {
+            // Apply language first
+            updateLanguage();
+
+            // Check URL search params for redirect tokens from OAuth
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenParam = urlParams.get('token');
+            const usernameParam = urlParams.get('username');
+
+            if (tokenParam) {
+                localStorage.setItem('vibe_token', tokenParam);
+                if (usernameParam) {
+                    localStorage.setItem('vibe_username', usernameParam);
+                }
+                
+                // Clear URL address query parameters so the view looks clean
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+
+            const isAuthenticated = checkAuth();
+            if (!isAuthenticated) {
+                return;
+            }
+
+            // Apply grid coordinates attributes from localStorage first
+            loadGridLayout();
+
+            try {
+                await loadData();
+            } catch (err) {
+                console.error("Connection to backend failed, retrying shortly...", err);
+                showToast(t('msg_backend_fail'), "error");
+            }
+            lucide.createIcons();
+            populateSelectors();
+
+            // Initialize Gridstack after items are populated
+            initGridStack();
+        }
+
+        // Apply saved positions/sizes from localStorage
+        function loadGridLayout() {
+            const username = localStorage.getItem('vibe_username') || 'admin';
+            let layout = JSON.parse(localStorage.getItem('vibe_grid_layout_' + username)) || defaultLayout;
+            layout.forEach(item => {
+                const el = document.querySelector(`[gs-id="${item.id}"]`);
+                if (el) {
+                    el.setAttribute('gs-x', item.x);
+                    el.setAttribute('gs-y', item.y);
+                    el.setAttribute('gs-w', item.w);
+                    el.setAttribute('gs-h', item.h);
+                }
+            });
+        }
+
+        // Initialize GridStack with One Column responsive mode configuration
+        function initGridStack() {
+            grid = GridStack.init({
+                cellHeight: 80,
+                margin: 15,
+                handle: '.grid-drag-handle',
+                minRow: 1,
+                animate: true,
+                float: true,
+                disableOneColumnMode: false,
+                oneColumnSize: 768
+            });
+
+            // Save layout on changes
+            grid.on('change', function(event, items) {
+                saveGridLayout();
+            });
+
+            // Apply locked or active edit mode state
+            applyEditMode();
+        }
+
+        // Save grid positions to localStorage
+        function saveGridLayout() {
+            const username = localStorage.getItem('vibe_username') || 'admin';
+            let layout = [];
+            grid.getGridItems().forEach(el => {
+                let item = el.gridstackNode;
+                layout.push({
+                    id: el.getAttribute('gs-id'),
+                    x: item.x,
+                    y: item.y,
+                    w: item.w,
+                    h: item.h
+                });
+            });
+            localStorage.setItem('vibe_grid_layout_' + username, JSON.stringify(layout));
+        }
+
+        // Fetch data from FastAPI backend
+        async function loadData() {
+            try {
+                // Fetch in parallel
+                const [inv, txs, kpis] = await Promise.all([
+                    apiRequest('/api/inventory'),
+                    apiRequest('/api/transactions'),
+                    apiRequest('/api/kpis')
+                ]);
+
+                products = inv;
+                transactions = txs;
+
+                // Render components
+                renderInventoryTable();
+                updateKPICards(kpis);
+                renderRecentTransactionsList();
+            } catch (err) {
+                console.error("Error loading database:", err);
+            }
+        }
+
+        // Reset data to default database state and reset grid layout
+        async function resetData() {
+            showConfirm("confirm_reset_msg", async () => {
+                try {
+                    // Reset DB
+                    await apiRequest('/api/reset', { method: 'POST' });
+                    
+                    // Reset Grid Layout for user
+                    const username = localStorage.getItem('vibe_username') || 'admin';
+                    localStorage.removeItem('vibe_grid_layout_' + username);
+                    
+                    // Reload page to re-render default layout and data cleanly
+                    window.location.reload();
+                } catch (err) {
+                    showToast(`${t('msg_reset_failed')}${err.message}`, "error");
+                }
+            });
+        }
+
+        // Export active database data as JSON
+        async function exportData() {
+            try {
+                const inv = await apiRequest('/api/inventory');
+                const txs = await apiRequest('/api/transactions');
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ products: inv, transactions: txs }, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `VibeInventory_DB_Export_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+            } catch (err) {
+                showToast(`${t('msg_export_failed')}${err.message}`, "error");
+            }
+        }
+
+        // Delete a product from inventory and transactions history
+        async function deleteProduct(sku) {
+            const confirmMsg = currentLang === 'en'
+                ? `Are you sure you want to delete this product? All inventory and transaction history will be lost.`
+                : `您確定要刪除此產品嗎？所有庫存與交易歷史記錄都將遺失。`;
+                
+            if (confirm(confirmMsg)) {
+                try {
+                    await apiRequest(`/api/products/${sku}`, {
+                        method: 'DELETE'
+                    });
+                    showToast(currentLang === 'en' ? `Product ${sku} deleted successfully.` : `產品 ${sku} 刪除成功。`);
+                    
+                    // Reload data, update layout, populate selectors
+                    await loadData();
+                    populateSelectors();
+                } catch (err) {
+                    showToast(err.message, "error");
+                }
+            }
+        }
+
+        // Populate dropdown selectors in POS and Inbound Modal
+        function populateSelectors() {
+            const posSelect = document.getElementById('pos-product');
+            const inboundSelect = document.getElementById('inbound-sku-select');
+            
+            const selectedPOSVal = posSelect.value;
+            const selectedInboundVal = inboundSelect.value;
+
+            posSelect.innerHTML = `<option value="" disabled selected data-i18n="pos_choose_product">${t('pos_choose_product')}</option>`;
+            inboundSelect.innerHTML = `<option value="" disabled selected data-i18n="opt_select_sku">${t('opt_select_sku')}</option>`;
+
+            products.forEach(p => {
+                const posOpt = document.createElement('option');
+                posOpt.value = p.sku;
+                posOpt.textContent = `${p.sku} - ${p.name} ($${p.price.toFixed(2)})`;
+                posSelect.appendChild(posOpt);
+
+                const inboundOpt = document.createElement('option');
+                inboundOpt.value = p.sku;
+                inboundOpt.textContent = `${p.sku} - ${p.name}`;
+                inboundSelect.appendChild(inboundOpt);
+            });
+
+            if (products.some(p => p.sku === selectedPOSVal)) posSelect.value = selectedPOSVal;
+            if (products.some(p => p.sku === selectedInboundVal)) inboundSelect.value = selectedInboundVal;
+
+            onPOSProductChange();
+        }
+
+        // Render Inventory Dashboard Table rows
+        function renderInventoryTable() {
+            const tableBody = document.getElementById('inventory-table-body');
+            const searchQuery = document.getElementById('search-input').value.toLowerCase();
+            
+            tableBody.innerHTML = '';
+            
+            let filteredList = products.filter(p => {
+                const matchesSearch = p.name.toLowerCase().includes(searchQuery) || p.sku.toLowerCase().includes(searchQuery);
+                
+                let matchesFilter = true;
+                if (filterMode === 'in-stock') matchesFilter = p.quantity > p.low_stock_threshold;
+                else if (filterMode === 'low-stock') matchesFilter = p.quantity <= p.low_stock_threshold && p.quantity > 0;
+                else if (filterMode === 'out-of-stock') matchesFilter = p.quantity === 0;
+                
+                return matchesSearch && matchesFilter;
+            });
+
+            if (filteredList.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="py-12 text-center text-zinc-500 text-sm">
+                            <i data-lucide="info" class="h-8 w-8 mx-auto mb-2 text-zinc-600"></i>
+                            No products found matching filters.
+                        </td>
+                    </tr>
+                `;
+            } else {
+                filteredList.forEach(p => {
+                    const isOutOfStock = p.quantity === 0;
+                    const isLowStock = p.quantity <= p.low_stock_threshold && p.quantity > 0;
+                    
+                    let statusBadgeClass = '';
+                    let statusText = '';
+                    let quantityTextClass = 'text-black font-extrabold';
+                    let rowBgClass = 'bg-white border-b-2 border-black';
+
+                    if (isOutOfStock) {
+                        statusBadgeClass = 'bg-red-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] px-2 py-0.5 text-xs font-bold';
+                        statusText = t('badge_out_of_stock');
+                        quantityTextClass = 'text-red-600 font-extrabold';
+                        rowBgClass = 'bg-red-50/70 border-b-2 border-black';
+                    } else if (isLowStock || p.quantity < 5) {
+                        statusBadgeClass = 'bg-red-400 text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] px-2 py-0.5 text-xs font-bold animate-pulse-subtle';
+                        statusText = t('badge_low_stock');
+                        quantityTextClass = 'text-red-600 font-extrabold';
+                        rowBgClass = 'bg-red-50/70 border-b-2 border-black';
+                    } else {
+                        statusBadgeClass = 'bg-emerald-300 text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] px-2 py-0.5 text-xs font-bold';
+                        statusText = t('badge_in_stock');
+                        quantityTextClass = 'text-black font-extrabold';
+                    }
+
+                    // Table quick buttons conform to 48px touch sizes
+                    const rowHTML = `
+                        <tr class="${rowBgClass} transition-colors group">
+                            <td class="py-4 px-6 border-r-2 border-black text-left">
+                                <div class="font-bold text-black group-hover:text-zinc-600 transition-colors">${p.name}</div>
+                                <div class="text-xs text-zinc-500 mt-0.5">${p.sku}</div>
+                            </td>
+                            <td class="py-4 px-6 text-right font-extrabold text-black border-r-2 border-black">$${p.price.toFixed(2)}</td>
+                            <td class="py-4 px-6 text-center border-r-2 border-black ${quantityTextClass}">${p.quantity}</td>
+                            <td class="py-4 px-6 text-center border-r-2 border-black text-black">${p.low_stock_threshold}</td>
+                            <td class="py-4 px-6 text-center border-r-2 border-black">
+                                <span class="inline-flex items-center ${statusBadgeClass}">
+                                    ${statusText}
+                                </span>
+                            </td>
+                            <td class="py-4 px-6 text-right flex items-center justify-end gap-2">
+                                <button onclick="quickInbound('${p.sku}')" class="bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-50 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] min-w-[48px] flex items-center justify-center p-2" title="${t('tooltip_quick_add')}">
+                                    <i data-lucide="plus-square" class="h-5 w-5"></i>
+                                </button>
+                                <button onclick="quickPOS('${p.sku}')" class="bg-black text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-900 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] min-w-[48px] flex items-center justify-center p-2" title="${t('tooltip_quick_pos')}">
+                                    <i data-lucide="shopping-bag" class="h-5 w-5"></i>
+                                </button>
+                                <button onclick="deleteProduct('${p.sku}')" class="bg-red-400 text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-red-500 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] min-w-[48px] flex items-center justify-center p-2" title="Delete Product">
+                                    <i data-lucide="trash-2" class="h-5 w-5"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    tableBody.innerHTML += rowHTML;
+                });
+            }
+            lucide.createIcons();
+        }
+
+        // Search trigger
+        function renderDashboard() {
+            renderInventoryTable();
+        }
+
+        // Update KPI values in the UI cards
+        function updateKPICards(kpis) {
+            document.getElementById('kpi-total-skus').textContent = kpis.total_products;
+            document.getElementById('kpi-total-stock').textContent = kpis.total_stock_items;
+            document.getElementById('kpi-low-stock-count').textContent = kpis.low_stock_alerts;
+
+            const kpiCard = document.getElementById('kpi-card-low-stock');
+            const kpiIcon = document.getElementById('kpi-icon-low-stock');
+            
+            if (kpis.low_stock_alerts > 0) {
+                kpiCard.className = "relative overflow-hidden bg-red-400 p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all duration-300";
+                kpiIcon.className = "border-2 border-black bg-white p-3 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] animate-pulse-subtle";
+            } else {
+                kpiCard.className = "relative overflow-hidden bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all duration-300";
+                kpiIcon.className = "border-2 border-black bg-zinc-100 p-3 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]";
+            }
+
+            document.getElementById('kpi-total-revenue').textContent = `$${kpis.total_revenue.toFixed(2)}`;
+        }
+
+        // Render recent activity feed from backend logs
+        function renderRecentTransactionsList() {
+            const logContainer = document.getElementById('transaction-log');
+            logContainer.innerHTML = '';
+
+            if (transactions.length === 0) {
+                logContainer.innerHTML = `<div class="text-zinc-500 text-sm text-center py-8" data-i18n="tx_no_logs">${t('tx_no_logs')}</div>`;
+                return;
+            }
+
+            transactions.forEach(t_item => {
+                const prod = products.find(p => p.sku === t_item.sku);
+                const name = prod ? prod.name : t_item.sku;
+                const dateObj = new Date(t_item.transaction_date);
+                const timeString = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                let badgeHTML = '';
+                let amountText = '';
+                let detailsText = '';
+
+                if (t_item.type === 'INBOUND') {
+                    badgeHTML = `<span class="inline-flex items-center rounded-md bg-blue-300 text-black border-2 border-black px-1.5 py-0.5 text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">${t('tx_badge_inbound')}</span>`;
+                    amountText = `<span class="text-black font-extrabold">+${t_item.quantity}</span>`;
+                    detailsText = currentLang === 'en' ? `Restocked SKU ${t_item.sku}` : `已補貨 SKU ${t_item.sku}`;
+                } else {
+                    badgeHTML = `<span class="inline-flex items-center rounded-md bg-emerald-300 text-black border-2 border-black px-1.5 py-0.5 text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">${t('tx_badge_sale')}</span>`;
+                    amountText = `<span class="text-black font-extrabold">+$${t_item.revenue.toFixed(2)}</span>`;
+                    detailsText = currentLang === 'en' ? `Sold ${t_item.quantity} items of ${name}` : `已售出 ${t_item.quantity} 件 ${name}`;
+                }
+
+                const transactionHTML = `
+                    <div class="flex items-center justify-between border-b-2 border-black last:border-b-0 py-2.5 text-sm">
+                        <div class="flex flex-col gap-1 text-left">
+                            <div class="flex items-center gap-2">
+                                ${badgeHTML}
+                                <span class="text-zinc-600 text-xs font-bold">${timeString}</span>
+                            </div>
+                            <span class="text-black font-bold">${detailsText}</span>
+                        </div>
+                        <div class="text-right">
+                            ${amountText}
+                        </div>
+                    </div>
+                `;
+                logContainer.innerHTML += transactionHTML;
+            });
+        }
+
+        // Set table filter mode
+        function setFilter(mode) {
+            filterMode = mode;
+            ['all', 'in-stock', 'low-stock', 'out-of-stock'].forEach(m => {
+                const btn = document.getElementById(`filter-btn-${m}`);
+                if (m === mode) {
+                    btn.className = "px-3 py-1.5 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex-1 sm:flex-none flex items-center justify-center";
+                } else {
+                    btn.className = "px-3 py-1.5 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-zinc-50 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex-1 sm:flex-none flex items-center justify-center";
+                }
+            });
+            renderInventoryTable();
+        }
+
+        /* --- Inbound Modal Controls --- */
+        const inboundModal = document.getElementById('inbound-dialog');
+
+        function openInboundModal() {
+            document.getElementById('inbound-form').reset();
+            setInboundMode('existing');
+            document.getElementById('inbound-error').classList.add('hidden');
+            inboundModal.showModal();
+        }
+
+        function closeInboundModal() {
+            inboundModal.close();
+        }
+
+        function setInboundMode(mode) {
+            inboundMode = mode;
+            const existingBtn = document.getElementById('inbound-mode-existing');
+            const newBtn = document.getElementById('inbound-mode-new');
+            const existingRow = document.getElementById('inbound-row-existing');
+            const newFields = document.getElementById('inbound-new-fields');
+
+            if (mode === 'existing') {
+                existingBtn.className = "flex-1 py-1.5 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                newBtn.className = "flex-1 py-1.5 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                existingRow.classList.remove('hidden');
+                newFields.classList.add('hidden');
+
+                document.getElementById('inbound-sku-select').setAttribute('required', 'required');
+                document.getElementById('inbound-sku-input').removeAttribute('required');
+                document.getElementById('inbound-name-input').removeAttribute('required');
+                document.getElementById('inbound-price-input').removeAttribute('required');
+            } else {
+                existingBtn.className = "flex-1 py-1.5 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                newBtn.className = "flex-1 py-1.5 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                existingRow.classList.add('hidden');
+                newFields.classList.remove('hidden');
+
+                document.getElementById('inbound-sku-select').removeAttribute('required');
+                document.getElementById('inbound-sku-input').setAttribute('required', 'required');
+                document.getElementById('inbound-name-input').setAttribute('required', 'required');
+                document.getElementById('inbound-price-input').setAttribute('required', 'required');
+            }
+        }
+
+        function quickInbound(sku) {
+            openInboundModal();
+            setInboundMode('existing');
+            document.getElementById('inbound-sku-select').value = sku;
+            document.getElementById('inbound-quantity').focus();
+        }
+
+        // Process Inbound Form submission to API
+        async function handleInboundSubmit(e) {
+            e.preventDefault();
+            const errorDiv = document.getElementById('inbound-error');
+            const errorText = document.getElementById('inbound-error-text');
+            errorDiv.classList.add('hidden');
+
+            const qty = parseInt(document.getElementById('inbound-quantity').value);
+            if (isNaN(qty) || qty <= 0) {
+                errorText.textContent = t('msg_invalid_inbound_qty');
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            let payload = { quantity: qty };
+
+            if (inboundMode === 'existing') {
+                const sku = document.getElementById('inbound-sku-select').value;
+                if (!sku) {
+                    errorText.textContent = t('msg_select_sku_err');
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+                payload.sku = sku;
+            } else {
+                const sku = document.getElementById('inbound-sku-input').value.trim();
+                const name = document.getElementById('inbound-name-input').value.trim();
+                const priceVal = parseFloat(document.getElementById('inbound-price-input').value);
+                const thresholdVal = parseInt(document.getElementById('inbound-threshold-input').value) || 5;
+
+                if (!sku || !name || isNaN(priceVal) || priceVal < 0) {
+                    errorText.textContent = t('msg_invalid_new_fields');
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+                
+                payload.sku = sku;
+                payload.name = name;
+                payload.price = priceVal;
+                payload.low_stock_threshold = thresholdVal;
+            }
+
+            try {
+                await apiRequest('/api/inbound', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                await loadData();
+                populateSelectors();
+                closeInboundModal();
+            } catch (err) {
+                errorText.textContent = err.message;
+                errorDiv.classList.remove('hidden');
+            }
+        }
+
+        /* --- POS Controls --- */
+
+        function onPOSProductChange() {
+            const sku = document.getElementById('pos-product').value;
+            const calcBox = document.getElementById('pos-calc-box');
+            const posError = document.getElementById('pos-error');
+            posError.classList.add('hidden');
+
+            if (!sku) {
+                calcBox.classList.add('hidden');
+                return;
+            }
+
+            const p = products.find(prod => prod.sku === sku);
+            if (p) {
+                document.getElementById('pos-price').value = p.price;
+                document.getElementById('pos-available-stock').textContent = p.quantity;
+                
+                const stockText = document.getElementById('pos-available-stock');
+                if (p.quantity === 0) {
+                    stockText.className = "font-extrabold text-red-600";
+                } else if (p.quantity < 5) {
+                    stockText.className = "font-extrabold text-red-500";
+                } else {
+                    stockText.className = "font-extrabold text-black";
+                }
+
+                calcBox.classList.remove('hidden');
+                calculatePOSTotal();
+            }
+        }
+
+        function calculatePOSTotal() {
+            const price = parseFloat(document.getElementById('pos-price').value) || 0;
+            const qty = parseInt(document.getElementById('pos-quantity').value) || 0;
+            const subtotal = price * qty;
+            document.getElementById('pos-subtotal-val').textContent = `$${subtotal.toFixed(2)}`;
+        }
+
+        function quickPOS(sku) {
+            document.getElementById('pos-product').value = sku;
+            onPOSProductChange();
+            document.getElementById('pos-quantity').value = 1;
+            calculatePOSTotal();
+            document.getElementById('pos-quantity').focus();
+        }
+
+        // Process POS Form Checkout via API
+        async function handlePOSCheckout(e) {
+            e.preventDefault();
+            const sku = document.getElementById('pos-product').value;
+            const posError = document.getElementById('pos-error');
+            const posErrorText = document.getElementById('pos-error-text');
+            posError.classList.add('hidden');
+
+            if (!sku) {
+                posErrorText.textContent = t('msg_pos_select_err');
+                posError.classList.remove('hidden');
+                return;
+            }
+
+            const qty = parseInt(document.getElementById('pos-quantity').value);
+            const customPrice = parseFloat(document.getElementById('pos-price').value);
+
+            if (isNaN(qty) || qty <= 0) {
+                posErrorText.textContent = t('msg_pos_positive_qty');
+                posError.classList.remove('hidden');
+                return;
+            }
+
+            if (isNaN(customPrice) || customPrice < 0) {
+                posErrorText.textContent = t('msg_pos_valid_price');
+                posError.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await apiRequest('/api/outbound', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sku: sku,
+                        quantity: qty,
+                        price: customPrice
+                    })
+                });
+
+                document.getElementById('pos-form').reset();
+                document.getElementById('pos-product').value = "";
+                document.getElementById('pos-calc-box').classList.add('hidden');
+
+                await loadData();
+                populateSelectors();
+
+                showToast(`${t('msg_sale_success')}$${response.revenue.toFixed(2)}`);
+            } catch (err) {
+                posErrorText.textContent = err.message;
+                posError.classList.remove('hidden');
+            }
+        }
+
+        // Toast notifications utility (Neubrutalist style: solid border-2, solid offset shadow)
+        function showToast(message, type = 'success') {
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'fixed bottom-5 right-5 z-50 flex flex-col gap-3 max-w-xs sm:max-w-md';
+                document.body.appendChild(container);
+            }
+
+            const toast = document.createElement('div');
+            const bgColors = type === 'success' ? 'bg-emerald-300' : 'bg-red-400';
+            const icon = type === 'success' ? 'check-circle' : 'alert-circle';
+            
+            toast.className = `flex items-center gap-2.5 border-2 border-black ${bgColors} text-black px-4 py-3 text-sm font-extrabold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-300 transform translate-y-2 opacity-0 min-h-[48px]`;
+            toast.innerHTML = `
+                <i data-lucide="${icon}" class="h-4.5 w-4.5 shrink-0 text-black"></i>
+                <span>${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3500);
+        }
+
+        // Confirmation modal utility (Neubrutalist dialog)
+        function showConfirm(messageKey, onConfirm) {
+            const dialog = document.getElementById('confirm-dialog');
+            document.getElementById('confirm-message').textContent = t(messageKey);
+            
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+            const okBtn = document.getElementById('confirm-ok-btn');
+            
+            const cleanup = () => {
+                cancelBtn.onclick = null;
+                okBtn.onclick = null;
+                dialog.close();
+            };
+            
+            cancelBtn.onclick = () => cleanup();
+            okBtn.onclick = () => {
+                cleanup();
+                onConfirm();
+            };
+            
+            dialog.showModal();
+            lucide.createIcons();
+        }
+
+        // --- SaaS Authentication UI & State Handlers ---
+        function checkAuth() {
+            const token = localStorage.getItem('vibe_token');
+            const overlay = document.getElementById('auth-overlay');
+            const logoutBtn = document.getElementById('logout-btn');
+            
+            if (token) {
+                overlay.classList.add('hidden');
+                if (logoutBtn) logoutBtn.classList.remove('hidden');
+                return true;
+            } else {
+                overlay.classList.remove('hidden');
+                if (logoutBtn) logoutBtn.classList.add('hidden');
+                return false;
+            }
+        }
+
+        // Apply default layout to DOM attributes
+        function applyDefaultLayout() {
+            defaultLayout.forEach(item => {
+                const el = document.querySelector(`[gs-id="${item.id}"]`);
+                if (el) {
+                    el.setAttribute('gs-x', item.x);
+                    el.setAttribute('gs-y', item.y);
+                    el.setAttribute('gs-w', item.w);
+                    el.setAttribute('gs-h', item.h);
+                }
+            });
+        }
+
+        function setAuthMode(mode) {
+            authMode = mode;
+            const loginBtn = document.getElementById('auth-mode-login');
+            const registerBtn = document.getElementById('auth-mode-register');
+            const title = document.getElementById('auth-title');
+            const subtitle = document.getElementById('auth-subtitle');
+            const submitText = document.getElementById('auth-submit-text');
+            const errorDiv = document.getElementById('auth-error');
+            const confirmPassContainer = document.getElementById('auth-confirm-password-container');
+            const confirmPassInput = document.getElementById('auth-confirm-password');
+            errorDiv.classList.add('hidden');
+
+            if (mode === 'login') {
+                loginBtn.className = "flex-1 py-2 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                registerBtn.className = "flex-1 py-2 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                title.textContent = currentLang === 'en' ? "Sign In to InOutSold!" : "登入 InOutSold!";
+                subtitle.textContent = currentLang === 'en' ? "Please sign in to manage your inventory catalog." : "請登入以管理您的庫存產品。";
+                submitText.textContent = "/// Sign In";
+                confirmPassContainer.classList.add('hidden');
+                confirmPassInput.removeAttribute('required');
+            } else {
+                loginBtn.className = "flex-1 py-2 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                registerBtn.className = "flex-1 py-2 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center";
+                title.textContent = currentLang === 'en' ? "Create a SaaS Account" : "註冊 SaaS 帳號";
+                subtitle.textContent = currentLang === 'en' ? "Register to manage your own isolated inventory." : "註冊以管理您自己獨立的庫存系統。";
+                submitText.textContent = "/// Register Account";
+                confirmPassContainer.classList.remove('hidden');
+                confirmPassInput.setAttribute('required', 'true');
+            }
+            lucide.createIcons();
+        }
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            const usernameInput = document.getElementById('auth-username').value;
+            const passwordInput = document.getElementById('auth-password').value;
+            const errorDiv = document.getElementById('auth-error');
+            const errorText = document.getElementById('auth-error-text');
+            errorDiv.classList.add('hidden');
+
+            if (authMode === 'register') {
+                const confirmPasswordInput = document.getElementById('auth-confirm-password').value;
+                if (passwordInput !== confirmPasswordInput) {
+                    errorText.textContent = currentLang === 'en' ? "Passwords do not match." : "密碼輸入不一致。";
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+
+                // Regex: At least 8 characters, one uppercase, one lowercase, one number, one special character
+                const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+                if (!strongPasswordRegex.test(passwordInput)) {
+                    errorText.textContent = currentLang === 'en'
+                        ? "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character."
+                        : "密碼必須至少為 8 個字元，且包含至少一個大寫字母、一個小寫字母、一個數字及一個特殊符號。";
+                    errorDiv.classList.remove('hidden');
+                    return;
+                }
+            }
+
+            const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: usernameInput, password: passwordInput })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({ detail: "Authentication request failed." }));
+                    let errMsg = errData.detail || "Authentication failed.";
+                    if (Array.isArray(errData.detail)) {
+                        errMsg = errData.detail.map(d => d.msg).join(", ");
+                    }
+                    throw new Error(errMsg);
+                }
+
+                const data = await response.json();
+                if (authMode === 'login') {
+                    localStorage.setItem('vibe_token', data.access_token);
+                    localStorage.setItem('vibe_username', data.username);
+                    
+                    document.getElementById('auth-form').reset();
+                    checkAuth();
+                    
+                    // Reload data for this user
+                    await loadData();
+                    populateSelectors();
+                    
+                    // Load user-specific grid positions & re-init gridstack cleanly
+                    loadGridLayout();
+                    if (grid) {
+                        grid.destroy(false);
+                    }
+                    initGridStack();
+                    
+                    showToast(currentLang === 'en' ? `Welcome back, ${data.username}!` : `歡迎回來，${data.username}！`);
+                } else {
+                    showToast(currentLang === 'en' ? "Registration successful! You can now log in." : "註冊成功！您現在可以進行登入。");
+                    setAuthMode('login');
+                }
+            } catch (err) {
+                errorText.textContent = err.message;
+                errorDiv.classList.remove('hidden');
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('vibe_token');
+            localStorage.removeItem('vibe_username');
+            
+            // Re-render auth UI view
+            checkAuth();
+            
+            // Clear page data
+            products = [];
+            transactions = [];
+            renderInventoryTable();
+            renderRecentTransactionsList();
+            populateSelectors();
+
+            // Reset Gridstack layout
+            if (grid) {
+                grid.destroy(false);
+                grid = null;
+            }
+            applyDefaultLayout();
+            
+            showToast(currentLang === 'en' ? "Signed out successfully." : "已成功登出。");
+        }
+
+        window.addEventListener('DOMContentLoaded', initData);
+    </script>
+
+    <!-- Custom Confirm Dialog -->
+    <dialog id="confirm-dialog" class="bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 max-w-sm w-full focus:outline-none">
+        <div class="p-6 space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="border-2 border-black bg-red-400 p-2 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <i data-lucide="help-circle" class="h-6 w-6"></i>
+                </div>
+                <h3 data-i18n="confirm_title" class="text-lg font-black font-outfit text-black">Are you sure?</h3>
+            </div>
+            <p id="confirm-message" class="text-sm text-zinc-700 text-left font-bold">This action will reset your database.</p>
+            <div class="pt-4 border-t-2 border-black flex justify-end gap-3 bg-zinc-50 p-4 -mx-6 -mb-6">
+                <button id="confirm-cancel-btn" data-i18n="btn_cancel" class="border-2 border-black bg-white px-4 py-2 text-sm font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-zinc-50 transition-all min-h-[48px] h-12">
+                    Cancel
+                </button>
+                <button id="confirm-ok-btn" data-i18n="btn_confirm" class="bg-red-500 text-white border-2 border-black px-4 py-2 text-sm font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-red-600 transition-all min-h-[48px] h-12">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Authentication Overlay Modal -->
+    <div id="auth-overlay" class="fixed inset-0 z-50 bg-[#FDF2E9] flex items-center justify-center p-4">
+        <div class="bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] max-w-md w-full p-6 text-left space-y-6">
+            <div class="flex items-center gap-3">
+                <div class="flex h-11 w-11 items-center justify-center border-2 border-black bg-black text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <i data-lucide="lock" class="h-6 w-6"></i>
+                </div>
+                <div>
+                    <h2 id="auth-title" class="font-outfit text-2xl font-black tracking-tight text-black">Sign In to InOutSold!</h2>
+                    <p id="auth-subtitle" class="text-xs text-zinc-600 mt-0.5">Please sign in to manage your inventory catalog.</p>
+                </div>
+            </div>
+
+            <!-- Auth Form Switch -->
+            <div class="flex border-2 border-black bg-zinc-100 p-1 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <button type="button" onclick="setAuthMode('login')" id="auth-mode-login" class="flex-1 py-2 text-xs font-extrabold bg-black text-white border-2 border-black shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center">
+                    Login
+                </button>
+                <button type="button" onclick="setAuthMode('register')" id="auth-mode-register" class="flex-1 py-2 text-xs font-extrabold bg-white text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all min-h-[48px] h-12 flex items-center justify-center">
+                    Register
+                </button>
+            </div>
+
+            <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+                <div>
+                    <label for="auth-username" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Username</label>
+                    <input type="text" id="auth-username" required class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                </div>
+                <div>
+                    <label for="auth-password" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Password</label>
+                    <input type="password" id="auth-password" required class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                </div>
+                <!-- Confirm Password Field -->
+                <div id="auth-confirm-password-container" class="hidden">
+                    <label for="auth-confirm-password" class="block text-xs font-bold text-black uppercase tracking-wider mb-1.5">Confirm Password</label>
+                    <input type="password" id="auth-confirm-password" class="w-full bg-white border-2 border-black px-3 py-2 text-sm text-black focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold min-h-[48px] h-12">
+                </div>
+
+                <!-- Error Alert in Auth -->
+                <div id="auth-error" class="hidden bg-red-100 border-2 border-black p-3 text-xs text-black flex items-start gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <i data-lucide="alert-circle" class="h-4 w-4 mt-0.5 shrink-0 text-red-600"></i>
+                    <span id="auth-error-text" class="font-bold">Incorrect username or password.</span>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="w-full bg-black text-white border-2 border-black font-extrabold px-4 py-2.5 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none hover:bg-zinc-900 transition-all flex items-center justify-center gap-1.5 min-h-[48px] h-12">
+                    <i data-lucide="check-circle-2" class="h-4.5 w-4.5"></i>
+                    <span id="auth-submit-text">/// Sign In</span>
+                </button>
+
+                <!-- OR Divider -->
+                <div id="auth-oauth-divider" class="flex items-center my-4">
+                    <div class="flex-grow border-t-2 border-black"></div>
+                    <span class="mx-3 text-xs font-bold text-black uppercase tracking-wider">OR</span>
+                    <div class="flex-grow border-t-2 border-black"></div>
+                </div>
+
+                <!-- Social Auth Buttons -->
+                <div id="auth-oauth-buttons" class="space-y-3">
+                    <button type="button" onclick="window.location.href = '/api/auth/google/login';" class="w-full bg-[#EA4335] text-white border-2 border-black font-extrabold px-4 py-2.5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none hover:bg-[#d33a2c] transition-all flex items-center justify-center gap-2 min-h-[48px] h-12">
+                        <i data-lucide="chrome" class="h-4.5 w-4.5"></i>
+                        <span>Continue with Google</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
