@@ -30,10 +30,16 @@ The application isolates tenant data at both the database schema level and the H
 *   **Reactive WebSocket Server (`ws://` / `wss://`):** Establishes persistent real-time communication pipes with connected browser clients. On inbound webhook executions, database transactions subtract stock balances and save transactional entries, instantly broadcasting updates to all online clients associated with the specific `user_id`.
 *   **Interactive Sync Widget:** Features a Neubrutalist SellByHere sync panel in Gridstack.js. It details the tenant's dynamic Webhook URL and verified Secret key (JWT) and maintains a scrollable list of the 5 most recent synchronized sales.
 
-### Store Link Binding (方案一)
-*   **Isolated Settings Table (`user_settings`):** Added a dedicated settings database schema with foreign key cascades on `user_id`. This allows tenants to save their custom SellByHere store homepage URL.
-*   **Secure Config API (`GET` & `PUT /api/v1/settings`):** Restricts read and update settings operations to authenticated callers using standard JWT authentication dependencies.
-*   **One-Click Launch Integration:** Adds a Neubrutalist External Store widget to the grid. On page load, it fetches the saved URL dynamically to populate the input box, binds saves to the database settings API, and maps a prominent launch action button to redirect managers to their SellByHere seller back-offices cleanly.
+### Store Link Binding & Multi-Channel Management (方案一)
+*   **Isolated Settings Table (`user_settings`):** Added a settings database schema mapping both `sellbyhere_url` and `shopify_url` properties to tenant `user_id` records with full SQLite schema migrations support.
+*   **Secure Config API (`GET` & `PUT /api/v1/settings`):** Restricts read and update settings operations to authenticated callers using standard JWT authorization headers. Saves and returns both SellByHere and Shopify store settings concurrently.
+*   **Multi-Channel Widget Layout:** Extends the Neubrutalist External Store widget to stack two visually isolated control panels:
+    *   **SellByHere Panel:** Quick configuration for 7-11 SellByHere seller links with an emerald green launch button.
+    *   **Shopify Panel:** Quick configuration for Shopify store dashboards (`https://your-store.myshopify.com/admin`) with a bold brand green launch button.
+
+### CSV Batch Order Import
+*   **Atomic Database Transaction Endpoint (`POST /api/v1/orders/batch-import`):** Accepts bulk CSV order logs via standard multipart file streams. Translates header parameters case-insensitively, matches products dynamically by name/SKU, deducts stock quantities, and appends outbound audit entries. The entire batch runs within a single atomic database transaction context, guaranteeing rollback and preventing data corruption if any single row fails.
+*   **Neubrutalist Dropzone Widget:** Integrates a Gridstack layout dashboard card featuring a drag-and-drop dashboard zone, file selection triggers, and a bulk upload button. On success, it triggers instant dashboard KPI refreshes.
 
 ---
 

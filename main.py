@@ -1,9 +1,12 @@
 import sqlite3
 import os
 import re
+import csv
+import io
+import pandas as pd
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, status, Depends, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, status, Depends, WebSocket, WebSocketDisconnect, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -117,6 +120,18 @@ def init_db(force_reset: bool = False):
         columns = [c[1] for c in cursor.fetchall()]
         has_user_id_column = "user_id" in columns
 
+    # Check if shopify_url column is missing from user_settings (for existing systems)
+    if has_users_table:
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_settings';")
+        if cursor.fetchone():
+            cursor.execute("PRAGMA table_info(user_settings);")
+            settings_cols = [c[1] for c in cursor.fetchall()]
+            if "shopify_url" not in settings_cols:
+                try:
+                    cursor.execute("ALTER TABLE user_settings ADD COLUMN shopify_url TEXT NOT NULL DEFAULT '';")
+                except sqlite3.Error:
+                    pass
+
     # If force_reset or old schema is detected, drop tables and rebuild
     if force_reset or not has_users_table or not has_user_id_column:
         cursor.execute("DROP TABLE IF EXISTS user_settings;")
@@ -178,6 +193,7 @@ def init_db(force_reset: bool = False):
     CREATE TABLE IF NOT EXISTS user_settings (
         user_id INTEGER PRIMARY KEY,
         sellbyhere_url TEXT NOT NULL DEFAULT '',
+        shopify_url TEXT NOT NULL DEFAULT '',
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     """)
@@ -958,23 +974,26 @@ async def orders_webhook(payload: WebhookOrderPayload, current_user: dict = Depe
 # --- Tenant Settings Endpoints ---
 class SettingsPayload(BaseModel):
     sellbyhere_url: str = Field(default="", description="The URL of the user's external SellByHere store.")
+    shopify_url: str = Field(default="", description="The URL of the user's external Shopify store.")
 
 @app.get("/api/v1/settings")
 def get_user_settings(current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT sellbyhere_url FROM user_settings WHERE user_id = ?;", (user_id,))
+    cursor.execute("SELECT sellbyhere_url, shopify_url FROM user_settings WHERE user_id = ?;", (user_id,))
     row = cursor.fetchone()
     conn.close()
 
-    url = row["sellbyhere_url"] if row else ""
-    return {"sellbyhere_url": url}
+    sellbyhere = row["sellbyhere_url"] if row else ""
+    shopify = row["shopify_url"] if row else ""
+    return {"sellbyhere_url": sellbyhere, "shopify_url": shopify}
 
 @app.put("/api/v1/settings")
 def update_user_settings(payload: SettingsPayload, current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
-    url = payload.sellbyhere_url.strip()
+    sellbyhere = payload.sellbyhere_url.strip()
+    shopify = payload.shopify_url.strip()
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -982,9 +1001,15 @@ def update_user_settings(payload: SettingsPayload, current_user: dict = Depends(
         # Check if settings record exists
         cursor.execute("SELECT user_id FROM user_settings WHERE user_id = ?;", (user_id,))
         if cursor.fetchone():
-            cursor.execute("UPDATE user_settings SET sellbyhere_url = ? WHERE user_id = ?;", (url, user_id))
+            cursor.execute(
+                "UPDATE user_settings SET sellbyhere_url = ?, shopify_url = ? WHERE user_id = ?;",
+                (sellbyhere, shopify, user_id)
+            )
         else:
-            cursor.execute("INSERT INTO user_settings (user_id, sellbyhere_url) VALUES (?, ?);", (user_id, url))
+            cursor.execute(
+                "INSERT INTO user_settings (user_id, sellbyhere_url, shopify_url) VALUES (?, ?, ?);",
+                (user_id, sellbyhere, shopify)
+            )
         conn.commit()
     except sqlite3.Error as e:
         conn.rollback()
@@ -992,4 +1017,285 @@ def update_user_settings(payload: SettingsPayload, current_user: dict = Depends(
     finally:
         conn.close()
 
-    return {"status": "success", "message": "Settings saved successfully.", "sellbyhere_url": url}
+    return {
+        "status": "success",
+        "message": "Settings saved successfully.",
+        "sellbyhere_url": sellbyhere,
+        "shopify_url": shopify
+    }
+
+
+@app.post("/api/v1/orders/batch-import")
+async def batch_import_orders(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    filename = file.filename.lower()
+    is_csv = filename.endswith('.csv')
+    is_excel = filename.endswith(('.xlsx', '.xls'))
+    
+    if not is_csv and not is_excel:
+        raise HTTPException(status_code=400, detail="不支援的檔案格式，請上傳 .csv 或 .xlsx 檔案。")
+        
+    try:
+        contents = await file.read()
+        
+        detected_encoding = 'utf-8'
+        raw_df = None
+        
+        if is_csv:
+            encodings = ['utf-8', 'big5', 'cp950', 'utf-8-sig', 'gbk']
+            decoded_successfully = False
+            
+            for enc in encodings:
+                try:
+                    raw_df = pd.read_csv(io.BytesIO(contents), header=None, nrows=10, encoding=enc)
+                    detected_encoding = enc
+                    decoded_successfully = True
+                    break
+                except Exception:
+                    continue
+                    
+            if not decoded_successfully:
+                raise HTTPException(status_code=400, detail="檔案編碼不支援，請確保為標準 UTF-8 或 Big5 CSV 格式。")
+        else:
+            try:
+                raw_df = pd.read_excel(io.BytesIO(contents), header=None, nrows=10, engine="openpyxl")
+            except Exception:
+                raise HTTPException(status_code=400, detail="無法解析 Excel 檔案，請確認檔案未損毀。")
+
+        product_keywords = {'商品名稱', '品名', '商品明細', '商品', 'product name', 'sku', 'product_name', 'name', '訂單內容', '商品資訊'}
+        quantity_keywords = {'數量', '件數', '銷售數量', 'quantity', 'qty', 'count', 'quantity_sold'}
+        amount_keywords = {'代收金額', '訂單金額', '總金額', '小計', 'total amount', 'total', '金額', 'total_amount', 'amount', 'revenue'}
+
+        header_idx = None
+        for idx, row in raw_df.iterrows():
+            row_vals = [str(val).strip().lower() for val in row.values if pd.notna(val)]
+            match_count = 0
+            if any(kw in row_vals for kw in product_keywords):
+                match_count += 1
+            if any(kw in row_vals for kw in quantity_keywords):
+                match_count += 1
+            if any(kw in row_vals for kw in amount_keywords):
+                match_count += 1
+                
+            if match_count >= 2:
+                header_idx = idx
+                break
+
+        if header_idx is None:
+            raise HTTPException(
+                status_code=400,
+                detail="無法辨識報表格式，請確認這是標準的賣貨便或 Shopify 訂單報表。"
+            )
+
+        if is_csv:
+            try:
+                df = pd.read_csv(io.BytesIO(contents), skiprows=header_idx, encoding=detected_encoding)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"無法解析 CSV 檔案：{str(e)}")
+        else:
+            try:
+                df = pd.read_excel(io.BytesIO(contents), skiprows=header_idx, engine="openpyxl")
+            except Exception:
+                raise HTTPException(status_code=400, detail="無法解析 Excel 檔案，請確認檔案未損毀。")
+
+        # Standardize column headers (strip whitespaces)
+        df.columns = [str(col).strip() for col in df.columns]
+        
+        # X-Ray Diagnostic Logging
+        print(f"Detected Columns: {df.columns.tolist()}")
+        
+        # Lists of accepted aliases (normalized to lowercase for English string comparisons)
+        product_details_aliases = ['商品明細', '商品詳情', '訂購明細', '訂單內容', '商品資訊', 'product details', 'details', 'product_details']
+        product_aliases = ['商品名稱', '品名', '商品', 'product name', 'sku', 'product_name', 'name']
+        quantity_aliases = ['數量', '件數', '銷售數量', 'quantity', 'qty', 'count', 'quantity_sold']
+        amount_aliases = ['代收金額', '訂單金額', '總金額', '小計', 'total amount', 'total', '金額', 'total_amount', 'amount', 'revenue']
+        status_aliases = ['訂單狀態', '狀態', 'order status', 'status']
+        
+        rename_map = {}
+        for col in df.columns:
+            norm = col.lower()
+            if norm in product_details_aliases:
+                rename_map[col] = 'product_details'
+            elif norm in product_aliases:
+                if col not in rename_map:
+                    rename_map[col] = 'product_name'
+            elif norm in quantity_aliases:
+                rename_map[col] = 'quantity'
+            elif norm in amount_aliases:
+                rename_map[col] = 'total_amount'
+            elif norm in status_aliases:
+                rename_map[col] = 'order_status'
+                
+        # Rename the matched columns
+        df = df.rename(columns=rename_map)
+        
+        # 1. Status Filtering
+        if 'order_status' in df.columns:
+            invalid_statuses = {'取消', '退貨', 'cancelled', 'returned', 'refunded', 'cancel', 'return', 'fail', 'failed'}
+            df = df[~df['order_status'].astype(str).str.strip().str.lower().isin(invalid_statuses)]
+            
+        # 2. Verify required columns exist (standard or combined)
+        has_details = 'product_details' in df.columns
+        has_name = 'product_name' in df.columns
+        has_qty = 'quantity' in df.columns
+        has_amount = 'total_amount' in df.columns
+        
+        is_valid = (has_name and has_qty and has_amount) or (has_details and has_amount)
+        
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"檔案缺少必要欄位：請確保包含商品名稱、數量與金額欄位。系統實際讀取到的欄位有：{df.columns.tolist()}"
+            )
+            
+        # Currency and Numeric Cleansing
+        if 'total_amount' in df.columns:
+            df['total_amount'] = df['total_amount'].astype(str).str.replace(r'[$,NT¥\s\u200b]', '', regex=True)
+            df['total_amount'] = pd.to_numeric(df['total_amount'], errors='coerce')
+            
+        if 'quantity' in df.columns:
+            df['quantity'] = df['quantity'].astype(str).str.replace(r'[$,NT¥\s\u200b]', '', regex=True)
+            df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
+
+        # 3. Product Details Parsing & Cell Splitting
+        cleaned_rows = []
+        if has_details:
+            for idx, row in df.iterrows():
+                details_val = str(row['product_details']).strip()
+                if pd.isna(row['product_details']) or not details_val or details_val.lower() == 'nan':
+                    continue
+                    
+                parts = re.split(r'[,\n\r;+，\uff0c\uff1b]', details_val)
+                row_items = []
+                for part in parts:
+                    part_str = part.strip()
+                    if not part_str:
+                        continue
+                        
+                    m1 = re.match(r'^(.+?)\s*[*xX×\uff0a\u00d7]\s*(\d+)$', part_str)
+                    m2 = re.match(r'^(\d+)\s*[*xX×\uff0a\u00d7]\s*(.+)$', part_str)
+                    
+                    if m1:
+                        p_name = m1.group(1).strip()
+                        p_qty = int(m1.group(2))
+                    elif m2:
+                        p_name = m2.group(2).strip()
+                        p_qty = int(m2.group(1))
+                    else:
+                        p_name = part_str
+                        p_qty = 1
+                        
+                    if p_name:
+                        row_items.append((p_name, p_qty))
+                        
+                use_amount = row['total_amount'] if len(row_items) == 1 else None
+                for p_name, p_qty in row_items:
+                    cleaned_rows.append({
+                        'product_name': p_name,
+                        'quantity': p_qty,
+                        'total_amount': use_amount
+                    })
+        else:
+            df = df.dropna(subset=['product_name', 'quantity'])
+            for idx, row in df.iterrows():
+                p_name = str(row['product_name']).strip()
+                if p_name:
+                    cleaned_rows.append({
+                        'product_name': p_name,
+                        'quantity': row['quantity'],
+                        'total_amount': row['total_amount']
+                    })
+                    
+        # Final drop NaN or empty names
+        rows_list = [r for r in cleaned_rows if r['product_name'] and r['product_name'].lower() != 'nan']
+        
+        if not rows_list:
+            raise HTTPException(status_code=400, detail="檔案中沒有可匯入的有效數據列。")
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            for idx, row in enumerate(rows_list):
+                prod_val = str(row['product_name']).strip()
+                qty_raw = row['quantity']
+                amount_raw = row['total_amount']
+                
+                if not prod_val:
+                    raise HTTPException(status_code=400, detail=f"Row {idx+1}: Missing required cell values.")
+                
+                try:
+                    qty_val = int(qty_raw)
+                    if pd.isna(amount_raw) or amount_raw is None:
+                        amount_val = None
+                    else:
+                        amount_val = float(amount_raw)
+                except (ValueError, TypeError):
+                    raise HTTPException(status_code=400, detail=f"Row {idx+1}: Quantity must be integer, Total Amount must be decimal.")
+                
+                if qty_val <= 0:
+                    raise HTTPException(status_code=400, detail=f"Row {idx+1}: Quantity must be a positive integer.")
+                # Find product matching by name OR SKU
+                cursor.execute(
+                    "SELECT sku, name, price FROM products WHERE user_id = ? AND (sku = ? OR name = ?);",
+                    (user_id, prod_val, prod_val)
+                )
+                prod = cursor.fetchone()
+                if not prod:
+                    raise HTTPException(status_code=400, detail=f"Row {idx+1}: Product '{prod_val}' not found in catalog.")
+                
+                sku = prod["sku"]
+                price = prod["price"]
+                
+                if amount_val is None:
+                    amount_val = qty_val * price
+                    
+                if amount_val < 0:
+                    raise HTTPException(status_code=400, detail=f"Row {idx+1}: Total Amount cannot be negative.")
+                
+                # Fetch inventory level
+                cursor.execute(
+                    "SELECT quantity FROM inventory_counts WHERE sku = ? AND user_id = ?;",
+                    (sku, user_id)
+                )
+                count_row = cursor.fetchone()
+                current_qty = count_row["quantity"] if count_row else 0
+                
+                if current_qty < qty_val:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Row {idx+1}: Insufficient stock for product '{prod_val}'. Current: {current_qty}, Requested: {qty_val}."
+                    )
+                
+                # Deduct stock
+                new_qty = current_qty - qty_val
+                cursor.execute(
+                    "UPDATE inventory_counts SET quantity = ? WHERE sku = ? AND user_id = ?;",
+                    (new_qty, sku, user_id)
+                )
+                
+                # Insert activity record
+                cursor.execute(
+                    """
+                    INSERT INTO transactions (sku, user_id, type, quantity, price, revenue, transaction_date)
+                    VALUES (?, ?, 'OUTBOUND', ?, ?, ?, ?);
+                    """,
+                    (sku, user_id, qty_val, price, amount_val, datetime.now().isoformat())
+                )
+            conn.commit()
+        except HTTPException:
+            conn.rollback()
+            raise
+        except sqlite3.Error as e:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail=f"Database error during transaction: {str(e)}")
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(status_code=400, detail=f"Failed to process file contents: {str(e)}")
+        finally:
+            conn.close()
+            
+        return {"success": True, "records_processed": len(rows_list), "errors": []}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")

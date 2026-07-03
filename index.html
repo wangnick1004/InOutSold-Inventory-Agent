@@ -419,7 +419,7 @@
             </div>
 
             <!-- Item 5: External Store Link Card -->
-            <div class="grid-stack-item" gs-id="store-link-card" gs-min-w="4" gs-min-h="3">
+            <div class="grid-stack-item" gs-id="store-link-card" gs-min-w="4" gs-min-h="5">
                 <div class="grid-stack-item-content bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col h-full overflow-y-auto">
                     <!-- Drag Handle Bar -->
                     <div class="grid-drag-handle cursor-grab border-b-2 border-black bg-yellow-300 p-2 text-xs font-black uppercase text-center select-none flex items-center justify-center gap-1.5 hover:bg-yellow-400 transition-colors -mt-6 -mx-6 mb-4">
@@ -436,29 +436,102 @@
                     </div>
 
                     <!-- Card Body -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-                        <!-- Left Panel: Input & Save -->
-                        <div class="space-y-4">
-                            <div class="flex flex-col gap-1.5">
-                                <label class="block text-xs font-black text-black">賣貨便賣場網址 (Store URL)</label>
-                                <div class="flex gap-2 w-full">
-                                    <input type="text" id="store-url-input" data-i18n-placeholder="store_link_placeholder" placeholder="https://myship.7-11.com.tw/..." class="flex-1 bg-white border-2 border-black p-2.5 text-xs font-bold focus:outline-none" />
-                                    <button type="button" onclick="saveStoreLink()" class="bg-black text-white border-2 border-black font-black px-4 py-2 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none hover:bg-zinc-900 transition-all flex items-center justify-center gap-1.5 h-10 min-h-[40px]">
-                                        <i data-lucide="save" class="h-4 w-4"></i>
-                                        <span data-i18n="store_link_btn_save">儲存連結</span>
-                                    </button>
+                    <div class="flex flex-col gap-6 text-left">
+                        <!-- Section A: 賣貨便 (SellByHere) -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b-2 border-dashed border-zinc-300">
+                            <!-- Left: Input & Save -->
+                            <div class="space-y-4">
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="block text-xs font-black text-black">7-11 賣貨便網址 (SellByHere URL)</label>
+                                    <div class="flex gap-2 w-full">
+                                        <input type="text" id="store-url-input" data-i18n-placeholder="store_link_placeholder" placeholder="https://myship.7-11.com.tw/..." class="flex-1 bg-white border-2 border-black p-2.5 text-xs font-bold focus:outline-none" />
+                                        <button type="button" onclick="saveSellByHereLink()" class="bg-black text-white border-2 border-black font-black px-4 py-2 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none hover:bg-zinc-900 transition-all flex items-center justify-center gap-1.5 h-10 min-h-[40px]">
+                                            <i data-lucide="save" class="h-4 w-4"></i>
+                                            <span data-i18n="store_link_btn_save">儲存連結</span>
+                                        </button>
+                                    </div>
                                 </div>
+                                <p class="text-[10px] text-zinc-600 leading-normal">
+                                    💡 在此貼上您的 7-11 賣貨便賣家賣場首頁連結，方便一鍵快速前往。
+                                </p>
                             </div>
-                            <p class="text-[10px] text-zinc-600 leading-normal">
-                                💡 在此貼上您的 7-11 賣貨便賣家賣場首頁連結（或任何其他外部電商連結），儲存後即可一鍵快速前往，方便管理商品與出貨。
-                            </p>
+
+                            <!-- Right: Launch button -->
+                            <div class="flex flex-col justify-center h-full">
+                                <button type="button" onclick="launchStore()" class="w-full bg-[#10B981] text-white border-2 border-black font-extrabold px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none hover:bg-[#059669] transition-all flex items-center justify-center gap-2 h-16 min-h-[48px] text-base">
+                                    <i data-lucide="external-link" class="h-6 w-6"></i>
+                                    <span data-i18n="store_link_btn_launch">開啟賣貨便賣場</span>
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- Right Panel: Launch button -->
-                        <div class="flex flex-col justify-center h-full">
-                            <button type="button" onclick="launchStore()" class="w-full bg-[#10B981] text-white border-2 border-black font-extrabold px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none hover:bg-[#059669] transition-all flex items-center justify-center gap-2 h-16 min-h-[48px] text-base">
-                                <i data-lucide="external-link" class="h-6 w-6"></i>
-                                <span data-i18n="store_link_btn_launch">開啟賣貨便賣場</span>
+                        <!-- Section B: Shopify -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Left: Input & Save -->
+                            <div class="space-y-4">
+                                <div class="flex flex-col gap-1.5">
+                                    <label class="block text-xs font-black text-black">Shopify 後台網址 (Shopify Admin URL)</label>
+                                    <div class="flex gap-2 w-full">
+                                        <input type="text" id="shopify-url-input" data-i18n-placeholder="store_shopify_placeholder" placeholder="https://your-store.myshopify.com/admin" class="flex-1 bg-white border-2 border-black p-2.5 text-xs font-bold focus:outline-none" />
+                                        <button type="button" onclick="saveShopifyLink()" class="bg-black text-white border-2 border-black font-black px-4 py-2 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none hover:bg-zinc-900 transition-all flex items-center justify-center gap-1.5 h-10 min-h-[40px]">
+                                            <i data-lucide="save" class="h-4 w-4"></i>
+                                            <span data-i18n="store_link_btn_save">儲存連結</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <p class="text-[10px] text-zinc-600 leading-normal">
+                                    💡 在此貼上您的 Shopify 後台登入網址，儲存後即可快速前往後台管理您的跨國訂單。
+                                </p>
+                            </div>
+
+                            <!-- Right: Launch button -->
+                            <div class="flex flex-col justify-center h-full">
+                                <button type="button" onclick="launchShopify()" class="w-full bg-[#95BF47] text-white border-2 border-black font-extrabold px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none hover:bg-[#7ea638] transition-all flex items-center justify-center gap-2 h-16 min-h-[48px] text-base">
+                                    <i data-lucide="external-link" class="h-6 w-6"></i>
+                                    <span data-i18n="store_shopify_btn_launch">開啟 Shopify 後台</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Item 6: CSV Batch Import Widget -->
+            <div class="grid-stack-item" gs-id="csv-import-card" gs-min-w="4" gs-min-h="3">
+                <div class="grid-stack-item-content bg-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col h-full overflow-y-auto">
+                    <!-- Drag Handle Bar -->
+                    <div class="grid-drag-handle cursor-grab border-b-2 border-black bg-yellow-300 p-2 text-xs font-black uppercase text-center select-none flex items-center justify-center gap-1.5 hover:bg-yellow-400 transition-colors -mt-6 -mx-6 mb-4">
+                        <i data-lucide="grip-horizontal" class="h-4 w-4"></i>
+                        <span data-i18n="drag_handle">Drag Header to Reposition Card</span>
+                    </div>
+                    <div class="flex items-center justify-between mb-4 pb-4 border-b-2 border-black">
+                        <div class="flex items-center gap-2">
+                            <div class="border-2 border-black bg-blue-300 p-2 text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                                <i data-lucide="file-spreadsheet" class="h-5 w-5"></i>
+                            </div>
+                            <h2 data-i18n="csv_import_title" class="text-lg font-black font-outfit text-black">批次訂單匯入</h2>
+                        </div>
+                    </div>
+
+                    <!-- Card Body -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left flex-1">
+                        <!-- Left Panel: Drag & Drop File Upload -->
+                        <div class="flex flex-col gap-3">
+                            <div id="csv-drop-zone" onclick="triggerCSVSelect()" class="border-4 border-dashed border-black bg-zinc-50 p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-yellow-50 transition-colors h-full min-h-[120px] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none">
+                                <i data-lucide="upload-cloud" class="h-8 w-8 text-black mb-2 animate-bounce"></i>
+                                <p id="csv-drop-text" data-i18n="csv_import_dropzone" class="text-xs font-black text-black">拖曳訂單 CSV 或 Excel (.xlsx) 檔案至此，或點擊選擇檔案</p>
+                                <input type="file" id="csv-file-input" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="hidden" onchange="handleCSVFileSelect(event)" />
+                            </div>
+                        </div>
+
+                        <!-- Right Panel: Submit / Update button -->
+                        <div class="flex flex-col justify-center gap-4">
+                            <div id="selected-csv-info" class="hidden bg-zinc-100 border-2 border-black p-3 text-xs font-bold text-black flex items-center justify-between shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                <span id="csv-filename" class="truncate pr-2">file.csv</span>
+                                <button type="button" onclick="clearSelectedCSV()" class="text-red-600 font-extrabold hover:underline">X</button>
+                            </div>
+                            <button type="button" onclick="uploadCSVBatch()" class="w-full bg-[#3B82F6] text-white border-2 border-black font-extrabold px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[6px] active:translate-y-[6px] active:shadow-none hover:bg-[#2563EB] transition-all flex items-center justify-center gap-2 h-16 min-h-[48px] text-base">
+                                <i data-lucide="refresh-cw" class="h-6 w-6"></i>
+                                <span data-i18n="csv_import_btn">上傳並更新庫存</span>
                             </button>
                         </div>
                     </div>
@@ -640,12 +713,22 @@
                 msg_pos_valid_price: 'Please specify a valid sale price.',
                 sellbyhere_title: 'SellByHere Order Sync',
                 sellbyhere_open: 'Open SellByHere Portal',
-                store_link_title: 'External Store',
+                store_link_title: 'External Store Shortcuts',
                 store_link_placeholder: 'https://myship.7-11.com.tw/...',
                 store_link_btn_save: 'Save URL',
                 store_link_btn_launch: 'Launch Store',
                 msg_store_link_empty: 'Please paste and save your SellByHere store URL first.',
-                msg_store_link_saved: 'Store URL saved successfully.'
+                msg_store_link_saved: 'SellByHere store URL saved successfully.',
+                store_shopify_title: 'Shopify Admin',
+                store_shopify_placeholder: 'https://your-store.myshopify.com/admin',
+                store_shopify_btn_launch: 'Launch Shopify Admin',
+                msg_shopify_link_empty: 'Please paste and save your Shopify store URL first.',
+                msg_shopify_link_saved: 'Shopify store URL saved successfully.',
+                csv_import_title: 'Batch Order Import',
+                csv_import_dropzone: 'Drag & drop your orders CSV or Excel (.xlsx) here, or click to browse',
+                csv_import_btn: 'Upload & Sync',
+                msg_csv_import_success: 'Successfully imported orders. Processed records: ',
+                msg_csv_no_file: 'Please select a CSV or Excel file first.'
             },
             'zh-tw': {
                 brand_badge: '網格自訂',
@@ -728,7 +811,17 @@
                 store_link_btn_save: '儲存連結',
                 store_link_btn_launch: '開啟賣貨便賣場',
                 msg_store_link_empty: '請先貼上並儲存您的賣貨便賣場連結。',
-                msg_store_link_saved: '賣場連結儲存成功。'
+                msg_store_link_saved: '賣場連結儲存成功。',
+                store_shopify_title: 'Shopify 後台',
+                store_shopify_placeholder: 'https://your-store.myshopify.com/admin',
+                store_shopify_btn_launch: '開啟 Shopify 後台',
+                msg_shopify_link_empty: '請先貼上並儲存您的 Shopify 後台網址。',
+                msg_shopify_link_saved: 'Shopify 後台網址儲存成功。',
+                csv_import_title: '批次訂單匯入',
+                csv_import_dropzone: '拖曳訂單 CSV 或 Excel (.xlsx) 檔案至此，或點擊選擇檔案',
+                csv_import_btn: '上傳並更新庫存',
+                msg_csv_import_success: '訂單匯入成功！已處理訂單數：',
+                msg_csv_no_file: '請先選擇一個 CSV 或 Excel 檔案。'
             }
         };
 
@@ -748,7 +841,8 @@
             { id: 'pos-card', x: 8, y: 0, w: 4, h: 3 },
             { id: 'activity-card', x: 8, y: 3, w: 4, h: 3 },
             { id: 'webhook-card', x: 0, y: 6, w: 12, h: 3 },
-            { id: 'store-link-card', x: 0, y: 9, w: 12, h: 3 }
+            { id: 'store-link-card', x: 0, y: 9, w: 12, h: 5 },
+            { id: 'csv-import-card', x: 0, y: 14, w: 12, h: 3 }
         ];
 
         // Translation retriever helper
@@ -900,6 +994,7 @@
 
             // Initialize Gridstack after items are populated
             initGridStack();
+            setupCSVDragAndDrop();
         }
 
         // Apply saved positions/sizes from localStorage
@@ -985,10 +1080,14 @@
                 }
 
                 // Fetch saved store link settings
-                const settings = await apiRequest('/api/v1/settings').catch(() => ({ sellbyhere_url: "" }));
+                const settings = await apiRequest('/api/v1/settings').catch(() => ({ sellbyhere_url: "", shopify_url: "" }));
                 const storeUrlInput = document.getElementById('store-url-input');
                 if (storeUrlInput) {
                     storeUrlInput.value = settings.sellbyhere_url || '';
+                }
+                const shopifyUrlInput = document.getElementById('shopify-url-input');
+                if (shopifyUrlInput) {
+                    shopifyUrlInput.value = settings.shopify_url || '';
                 }
             } catch (err) {
                 console.error("Error loading database:", err);
@@ -1672,6 +1771,11 @@
             if (storeUrlInput) {
                 storeUrlInput.value = '';
             }
+            const shopifyUrlInput = document.getElementById('shopify-url-input');
+            if (shopifyUrlInput) {
+                shopifyUrlInput.value = '';
+            }
+            clearSelectedCSV();
             
             // Re-render auth UI view
             checkAuth();
@@ -1775,33 +1879,148 @@
             window.open('https://myship.7-11.com.tw', '_blank');
         }
 
-        async function saveStoreLink() {
-            const input = document.getElementById('store-url-input');
-            if (!input) return;
-            const url = input.value.trim();
+        async function saveSellByHereLink() {
+            const sellbyhere = document.getElementById('store-url-input').value.trim();
+            const shopify = document.getElementById('shopify-url-input').value.trim();
+            await saveAllSettings(sellbyhere, shopify, 'sellbyhere');
+        }
 
+        async function saveShopifyLink() {
+            const sellbyhere = document.getElementById('store-url-input').value.trim();
+            const shopify = document.getElementById('shopify-url-input').value.trim();
+            await saveAllSettings(sellbyhere, shopify, 'shopify');
+        }
+
+        async function saveAllSettings(sellbyhere, shopify, triggerType) {
             try {
-                const res = await apiRequest('/api/v1/settings', {
+                await apiRequest('/api/v1/settings', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sellbyhere_url: url })
+                    body: JSON.stringify({ sellbyhere_url: sellbyhere, shopify_url: shopify })
                 });
-                showToast(t('msg_store_link_saved'), "success");
+                if (triggerType === 'sellbyhere') {
+                    showToast(t('msg_store_link_saved'), "success");
+                } else {
+                    showToast(t('msg_shopify_link_saved'), "success");
+                }
             } catch (err) {
-                showToast(err.message || "Failed to save link.", "error");
+                showToast(err.message || "Failed to save settings.", "error");
             }
         }
 
         function launchStore() {
-            const input = document.getElementById('store-url-input');
-            if (!input) return;
-            const url = input.value.trim();
-
+            const url = document.getElementById('store-url-input').value.trim();
             if (!url) {
                 alert(t('msg_store_link_empty'));
                 return;
             }
             window.open(url, '_blank');
+        }
+
+        function launchShopify() {
+            const url = document.getElementById('shopify-url-input').value.trim();
+            if (!url) {
+                alert(t('msg_shopify_link_empty'));
+                return;
+            }
+            window.open(url, '_blank');
+        }
+
+        let selectedCSVFile = null;
+
+        function triggerCSVSelect() {
+            const fileInput = document.getElementById('csv-file-input');
+            if (fileInput) fileInput.click();
+        }
+
+        function handleCSVFileSelect(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                setCSVFile(files[0]);
+            }
+        }
+
+        function setCSVFile(file) {
+            selectedCSVFile = file;
+            const infoDiv = document.getElementById('selected-csv-info');
+            const filenameSpan = document.getElementById('csv-filename');
+            if (infoDiv && filenameSpan) {
+                filenameSpan.textContent = file.name;
+                infoDiv.classList.remove('hidden');
+            }
+        }
+
+        function clearSelectedCSV() {
+            selectedCSVFile = null;
+            const infoDiv = document.getElementById('selected-csv-info');
+            const fileInput = document.getElementById('csv-file-input');
+            if (infoDiv) infoDiv.classList.add('hidden');
+            if (fileInput) fileInput.value = '';
+        }
+
+        async function uploadCSVBatch() {
+            if (!selectedCSVFile) {
+                alert(t('msg_csv_no_file'));
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', selectedCSVFile);
+
+            const token = localStorage.getItem('vibe_token');
+            try {
+                const response = await fetch('/api/v1/orders/batch-import', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.detail || 'Failed to import CSV.');
+                }
+
+                const result = await response.json();
+                showToast(t('msg_csv_import_success') + result.records_processed, "success");
+                clearSelectedCSV();
+
+                // Refresh widgets instantly
+                await loadData();
+                lucide.createIcons();
+            } catch (err) {
+                showToast(err.message || 'Import failed.', "error");
+            }
+        }
+
+        function setupCSVDragAndDrop() {
+            const zone = document.getElementById('csv-drop-zone');
+            if (!zone) return;
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                zone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('bg-zinc-50');
+                    zone.classList.add('bg-yellow-100');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                zone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('bg-yellow-100');
+                    zone.classList.add('bg-zinc-50');
+                }, false);
+            });
+
+            zone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files && files.length > 0) {
+                    setCSVFile(files[0]);
+                }
+            }, false);
         }
 
         window.addEventListener('DOMContentLoaded', initData);

@@ -1,5 +1,6 @@
 import os
 import pytest
+import io
 from fastapi.testclient import TestClient
 
 # Override the database file name in main BEFORE importing app elements
@@ -509,21 +510,27 @@ def test_settings_get_and_put():
     token_a = res_a.json()["access_token"]
     headers_a = {"Authorization": f"Bearer {token_a}"}
 
-    # Initial GET should return empty string
+    # Initial GET should return empty string for both
     res = client.get("/api/v1/settings", headers=headers_a)
     assert res.status_code == 200
     assert res.json()["sellbyhere_url"] == ""
+    assert res.json()["shopify_url"] == ""
 
     # PUT to update settings
-    payload = {"sellbyhere_url": "https://myship.7-11.com.tw/mock_store_a"}
+    payload = {
+        "sellbyhere_url": "https://myship.7-11.com.tw/mock_store_a",
+        "shopify_url": "https://store-a.myshopify.com/admin"
+    }
     put_res = client.put("/api/v1/settings", json=payload, headers=headers_a)
     assert put_res.status_code == 200
     assert put_res.json()["sellbyhere_url"] == "https://myship.7-11.com.tw/mock_store_a"
+    assert put_res.json()["shopify_url"] == "https://store-a.myshopify.com/admin"
 
-    # Subsequent GET should return updated URL
+    # Subsequent GET should return updated URLs
     get_res = client.get("/api/v1/settings", headers=headers_a)
     assert get_res.status_code == 200
     assert get_res.json()["sellbyhere_url"] == "https://myship.7-11.com.tw/mock_store_a"
+    assert get_res.json()["shopify_url"] == "https://store-a.myshopify.com/admin"
 
 
 def test_settings_unauthenticated():
@@ -531,7 +538,10 @@ def test_settings_unauthenticated():
     res = client.get("/api/v1/settings")
     assert res.status_code == 401
 
-    res = client.put("/api/v1/settings", json={"sellbyhere_url": "http://example.com"})
+    res = client.put("/api/v1/settings", json={
+        "sellbyhere_url": "http://example.com",
+        "shopify_url": "https://shopify.com"
+    })
     assert res.status_code == 401
 
 
@@ -541,7 +551,10 @@ def test_settings_tenant_isolation():
     client.post("/api/auth/register", json={"username": "set_iso_a", "password": "VibePassword1!"})
     res_a = client.post("/api/auth/login", json={"username": "set_iso_a", "password": "VibePassword1!"})
     headers_a = {"Authorization": f"Bearer {res_a.json()['access_token']}"}
-    client.put("/api/v1/settings", json={"sellbyhere_url": "https://url-a.com"}, headers=headers_a)
+    client.put("/api/v1/settings", json={
+        "sellbyhere_url": "https://url-a.com",
+        "shopify_url": "https://shopify-a.com"
+    }, headers=headers_a)
 
     # User B
     client.post("/api/auth/register", json={"username": "set_iso_b", "password": "VibePassword2!"})
@@ -551,14 +564,315 @@ def test_settings_tenant_isolation():
     # User B should still see empty settings default
     res = client.get("/api/v1/settings", headers=headers_b)
     assert res.json()["sellbyhere_url"] == ""
+    assert res.json()["shopify_url"] == ""
 
     # User B updates theirs
-    client.put("/api/v1/settings", json={"sellbyhere_url": "https://url-b.com"}, headers=headers_b)
+    client.put("/api/v1/settings", json={
+        "sellbyhere_url": "https://url-b.com",
+        "shopify_url": "https://shopify-b.com"
+    }, headers=headers_b)
 
     # Assure both remain isolated
     res_a_final = client.get("/api/v1/settings", headers=headers_a).json()
     res_b_final = client.get("/api/v1/settings", headers=headers_b).json()
     assert res_a_final["sellbyhere_url"] == "https://url-a.com"
+    assert res_a_final["shopify_url"] == "https://shopify-a.com"
     assert res_b_final["sellbyhere_url"] == "https://url-b.com"
+    assert res_b_final["shopify_url"] == "https://shopify-b.com"
+
+
+def test_batch_import_orders_success_and_validation():
+    """Verify that batch order import works for matched products and isolates users."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "batch_user_a", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "batch_user_a", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Register & Login User B
+    client.post("/api/auth/register", json={"username": "batch_user_b", "password": "VibePassword2!"})
+    res_b = client.post("/api/auth/login", json={"username": "batch_user_b", "password": "VibePassword2!"})
+    token_b = res_b.json()["access_token"]
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    # User A registers product PROD1 with 10 stock
+    client.post("/api/inbound", json={"sku": "PROD1", "name": "Product One", "price": 20.0, "quantity": 10}, headers=headers_a)
+
+    # 1. Success case: User A imports orders for PROD1
+    csv_content = "Product Name,Quantity,Total Amount\nPROD1,3,60.0\n"
+    files = {"file": ("orders.csv", csv_content, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert res.json()["records_processed"] == 1
+
+    # Verify inventory is now 7
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    products_a = res_inv.json()
+    prod_a = next(p for p in products_a if p["sku"] == "PROD1")
+    assert prod_a["quantity"] == 7
+
+    # 2. Insufficient stock case: User A imports 10 more (current: 7)
+    csv_content_insufficient = "Product Name,Quantity,Total Amount\nPROD1,10,200.0\n"
+    files_insufficient = {"file": ("orders.csv", csv_content_insufficient, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files_insufficient, headers=headers_a)
+    assert res.status_code == 400
+    assert "Insufficient stock" in res.json()["detail"]
+
+    # Verify stock remains 7 (rolled back)
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    products_a = res_inv.json()
+    prod_a = next(p for p in products_a if p["sku"] == "PROD1")
+    assert prod_a["quantity"] == 7
+
+    # 3. Tenant isolation: User B attempts to import orders for PROD1
+    csv_content_b = "Product Name,Quantity,Total Amount\nPROD1,2,40.0\n"
+    files_b = {"file": ("orders.csv", csv_content_b, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files_b, headers=headers_b)
+    # User B does not have PROD1 in their catalog, so should fail with not found
+    assert res.status_code == 400
+    assert "not found in catalog" in res.json()["detail"]
+
+    # Verify User A's stock is still 7
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    products_a = res_inv.json()
+    prod_a = next(p for p in products_a if p["sku"] == "PROD1")
+    assert prod_a["quantity"] == 7
+
+
+def test_batch_import_excel_success():
+    """Verify that batch order import successfully parses Excel (.xlsx) files."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "excel_user_a", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "excel_user_a", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Inbound product stock
+    client.post("/api/inbound", json={"sku": "PROD9", "name": "Product Nine", "price": 50.0, "quantity": 10}, headers=headers_a)
+
+    # Generate XLSX bytes
+    import pandas as pd
+    df = pd.DataFrame([
+        {"Product Name": "PROD9", "Quantity": 4, "Total Amount": 200.0}
+    ])
+    excel_buffer = io.BytesIO()
+    df.to_excel(excel_buffer, index=False, engine='openpyxl')
+    excel_bytes = excel_buffer.getvalue()
+
+    # Upload excel file
+    files = {"file": ("orders.xlsx", excel_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert res.json()["records_processed"] == 1
+
+    # Verify inventory is now 6
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    prod_a = next(p for p in res_inv.json() if p["sku"] == "PROD9")
+    assert prod_a["quantity"] == 6
+
+
+def test_batch_import_chinese_aliases_csv():
+    """Verify that batch order import correctly translates Chinese header aliases."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "zh_alias_user", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "zh_alias_user", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Inbound product
+    inbound_res = client.post("/api/inbound", json={"sku": "PROD-ZH", "name": "商品中文測試", "price": 100.0, "quantity": 10}, headers=headers_a)
+    assert inbound_res.status_code == 200
+
+    # Post CSV with Taiwanese headers
+    csv_content = "商品名稱,數量,金額\nPROD-ZH,3,300.0\n"
+    files = {"file": ("orders.csv", csv_content, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert res.json()["records_processed"] == 1
+
+    # Verify inventory is now 7
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    prod_a = next(p for p in res_inv.json() if p["sku"] == "PROD-ZH")
+    assert prod_a["quantity"] == 7
+
+
+def test_batch_import_missing_mandatory_fields():
+    """Verify that batch import fails with a clean 400 error when mandatory columns are missing."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "missing_fields_user", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "missing_fields_user", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Post CSV without the Amount/金額 column
+    csv_content = "商品名稱,數量\nPROD-ZH,3\n"
+    files = {"file": ("orders.csv", csv_content, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 400
+    assert "檔案缺少必要欄位：請確保包含商品名稱、數量與金額欄位" in res.json()["detail"]
+
+
+def test_batch_import_offset_headers_excel():
+    """Verify that batch import correctly ignores metadata lines above the header and summary lines at the bottom."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "offset_user", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "offset_user", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Inbound product
+    client.post("/api/inbound", json={"sku": "PROD-OFFSET", "name": "Offset Item", "price": 40.0, "quantity": 10}, headers=headers_a)
+
+    # Generate XLSX with 2 metadata rows at the top and a summary row at the bottom
+    import pandas as pd
+    data = [
+        # Metadata rows (empty / descriptions)
+        ["賣貨便訂單匯出報表", "", ""],
+        ["產出時間: 2026-07-03", "", ""],
+        # Header row
+        ["商品名稱", "數量", "代收金額"],
+        # Valid data row
+        ["PROD-OFFSET", 4, 160.0],
+        # Summary row (empty Name/SKU, has totals)
+        [None, 4, 160.0]
+    ]
+    df = pd.DataFrame(data)
+    
+    excel_buffer = io.BytesIO()
+    # Write to excel without index or header
+    df.to_excel(excel_buffer, index=False, header=False, engine='openpyxl')
+    excel_bytes = excel_buffer.getvalue()
+
+    # Upload excel file
+    files = {"file": ("offset_orders.xlsx", excel_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert res.json()["records_processed"] == 1 # only 1 valid row (the summary row was discarded)
+
+    # Verify inventory is now 6
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    prod_a = next(p for p in res_inv.json() if p["sku"] == "PROD-OFFSET")
+    assert prod_a["quantity"] == 6
+
+
+def test_batch_import_invalid_header_format():
+    """Verify that batch import fails with 400 when headers cannot be auto-detected."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "invalid_format_user", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "invalid_format_user", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Upload CSV without valid column headers anywhere in first 10 rows
+    csv_content = "Row1 Col1,Row1 Col2\nRandom value 1,Random value 2\n"
+    files = {"file": ("bad_format.csv", csv_content, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 400
+    assert "無法辨識報表格式" in res.json()["detail"]
+
+
+def test_batch_import_multiple_transactions_same_user():
+    """Verify that a tenant can insert multiple transactions during batch import without violating unique constraints."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "multi_tx_user", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "multi_tx_user", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Inbound stock
+    client.post("/api/inbound", json={"sku": "PROD-MULTI", "name": "Multi Tx Product", "price": 10.0, "quantity": 100}, headers=headers_a)
+
+    # 5 rows of transactions for the SAME product (PROD-MULTI) for the same user
+    csv_content = (
+        "商品名稱,數量,金額\n"
+        "PROD-MULTI,1,10.0\n"
+        "PROD-MULTI,2,20.0\n"
+        "PROD-MULTI,3,30.0\n"
+        "PROD-MULTI,4,40.0\n"
+        "PROD-MULTI,5,50.0\n"
+    )
+    files = {"file": ("orders.csv", csv_content, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert res.json()["records_processed"] == 5
+
+    # Verify inventory is now 85 (100 - 15)
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    prod_a = next(p for p in res_inv.json() if p["sku"] == "PROD-MULTI")
+    assert prod_a["quantity"] == 85
+
+
+def test_batch_import_data_cleansing_layer():
+    """Verify that batch import cleanses currency, splits multi-item details, and filters out cancelled/returned orders."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "clean_user", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "clean_user", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Inbound stock
+    client.post("/api/inbound", json={"sku": "PROD-CLEAN1", "name": "PROD-CLEAN1", "price": 100.0, "quantity": 10}, headers=headers_a)
+    client.post("/api/inbound", json={"sku": "PROD-CLEAN2", "name": "PROD-CLEAN2", "price": 50.0, "quantity": 10}, headers=headers_a)
+
+    # CSV with dirty currency symbols, combined details, and status column
+    csv_content = (
+        "訂單狀態,商品明細,訂單金額\n"
+        "成功,\"PROD-CLEAN1 * 2, PROD-CLEAN2 x 3\",NT$ 350.00\n" # Valid, will split into two (CLEAN1: 2, CLEAN2: 3)
+        "取消,PROD-CLEAN1 * 5,NT$ 500.00\n"                     # Invalid status, should be ignored
+        "成功,,NT$ 0.00\n"                                       # Empty product name/detail, should be ignored
+    )
+    files = {"file": ("orders.csv", csv_content, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert res.json()["records_processed"] == 2 # CLEAN1 and CLEAN2 from row 1
+
+    # Verify inventory is now 8 for CLEAN1 (10 - 2) and 7 for CLEAN2 (10 - 3)
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    prod_1 = next(p for p in res_inv.json() if p["sku"] == "PROD-CLEAN1")
+    prod_2 = next(p for p in res_inv.json() if p["sku"] == "PROD-CLEAN2")
+    assert prod_1["quantity"] == 8
+    assert prod_2["quantity"] == 7
+
+
+def test_batch_import_relaxed_columns():
+    """Verify that batch import relaxes validation when a combined column like '訂單內容' or '商品資訊' exists."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "relaxed_user", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "relaxed_user", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Inbound stock
+    client.post("/api/inbound", json={"sku": "PROD-RELAX", "name": "PROD-RELAX", "price": 10.0, "quantity": 20}, headers=headers_a)
+
+    # CSV with '訂單內容' and '訂單金額', missing separate product name and quantity columns
+    csv_content = (
+        "訂單狀態,訂單內容,訂單金額\n"
+        "成功,PROD-RELAX * 5,50.00\n"
+    )
+    files = {"file": ("orders.csv", csv_content, "text/csv")}
+    res = client.post("/api/v1/orders/batch-import", files=files, headers=headers_a)
+    
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+    assert res.json()["records_processed"] == 1
+
+    # Verify inventory is now 15 (20 - 5)
+    res_inv = client.get("/api/inventory", headers=headers_a)
+    prod = next(p for p in res_inv.json() if p["sku"] == "PROD-RELAX")
+    assert prod["quantity"] == 15
 
 
