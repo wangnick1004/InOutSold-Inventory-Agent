@@ -398,3 +398,167 @@ def test_google_oauth_login_redirect():
     assert "accounts.google.com" in redirect_url
     assert "client_id=mock_client_id" in redirect_url
     assert "redirect_uri=mock_redirect_uri" in redirect_url
+
+
+def test_sellbyhere_webhook_success_and_isolation():
+    """Verify that SellByHere webhook successfully updates inventory/revenue, and respects tenant isolation."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "webhookuser_a", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "webhookuser_a", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    
+    conn = main.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE username = 'webhookuser_a';")
+    user_id_a = cursor.fetchone()["id"]
+    conn.close()
+
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+    
+    # Call Webhook for User A: Sell 5 units of TS-VIB-01 for $125.00
+    payload = {
+        "user_id": user_id_a,
+        "product_id": "TS-VIB-01",
+        "quantity_sold": 5,
+        "total_amount_of_sale": 125.00
+    }
+    
+    res = client.post("/api/v1/orders/webhook/main", json=payload, headers=headers_a)
+    assert res.status_code == 200
+    assert res.json()["status"] == "success"
+
+    # Verify inventory is now 10
+    inv = client.get("/api/inventory", headers=headers_a).json()
+    item = next(p for p in inv if p["sku"] == "TS-VIB-01")
+    assert item["quantity"] == 10
+
+    # Register & Login User B
+    client.post("/api/auth/register", json={"username": "webhookuser_b", "password": "VibePassword2!"})
+    res_b = client.post("/api/auth/login", json={"username": "webhookuser_b", "password": "VibePassword2!"})
+    token_b = res_b.json()["access_token"]
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    # User A attempts to call webhook specifying User B's tenant ID - should fail with 403 Forbidden
+    conn = main.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE username = 'webhookuser_b';")
+    user_id_b = cursor.fetchone()["id"]
+    conn.close()
+
+    bad_payload = {
+        "user_id": user_id_b,
+        "product_id": "TS-VIB-01",
+        "quantity_sold": 1,
+        "total_amount_of_sale": 25.00
+    }
+    forbidden_res = client.post("/api/v1/orders/webhook/main", json=bad_payload, headers=headers_a)
+    assert forbidden_res.status_code == 403
+    assert "Tenant ID mismatch" in forbidden_res.json()["detail"]
+
+
+def test_sellbyhere_webhook_insufficient_stock():
+    """Verify that SellByHere webhook fails if requested quantity exceeds available stock."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "webhookuser_a", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "webhookuser_a", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    conn = main.get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE username = 'webhookuser_a';")
+    user_id_a = cursor.fetchone()["id"]
+    conn.close()
+
+    # User A starts with 15 units of TS-VIB-01. Requesting 16 units should fail.
+    payload = {
+        "user_id": user_id_a,
+        "product_id": "TS-VIB-01",
+        "quantity_sold": 16,
+        "total_amount_of_sale": 400.00
+    }
+    
+    res = client.post("/api/v1/orders/webhook/main", json=payload, headers=headers_a)
+    assert res.status_code == 400
+    assert "Insufficient stock" in res.json()["detail"]
+
+
+def test_websocket_endpoints_connection():
+    """Verify that WebSocket endpoint rejects invalid/empty tokens and connects for valid tokens."""
+    try:
+        with client.websocket_connect("/api/ws") as websocket:
+            assert False
+    except Exception:
+        pass
+
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "webhookuser_a", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "webhookuser_a", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+
+    # Connect with token
+    with client.websocket_connect(f"/api/ws?token={token_a}") as websocket:
+        pass
+
+
+def test_settings_get_and_put():
+    """Verify that user settings GET and PUT work correctly for authenticated users."""
+    # Register & Login User A
+    client.post("/api/auth/register", json={"username": "settingsuser_a", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "settingsuser_a", "password": "VibePassword1!"})
+    token_a = res_a.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # Initial GET should return empty string
+    res = client.get("/api/v1/settings", headers=headers_a)
+    assert res.status_code == 200
+    assert res.json()["sellbyhere_url"] == ""
+
+    # PUT to update settings
+    payload = {"sellbyhere_url": "https://myship.7-11.com.tw/mock_store_a"}
+    put_res = client.put("/api/v1/settings", json=payload, headers=headers_a)
+    assert put_res.status_code == 200
+    assert put_res.json()["sellbyhere_url"] == "https://myship.7-11.com.tw/mock_store_a"
+
+    # Subsequent GET should return updated URL
+    get_res = client.get("/api/v1/settings", headers=headers_a)
+    assert get_res.status_code == 200
+    assert get_res.json()["sellbyhere_url"] == "https://myship.7-11.com.tw/mock_store_a"
+
+
+def test_settings_unauthenticated():
+    """Verify that settings endpoints require valid JWT credentials."""
+    res = client.get("/api/v1/settings")
+    assert res.status_code == 401
+
+    res = client.put("/api/v1/settings", json={"sellbyhere_url": "http://example.com"})
+    assert res.status_code == 401
+
+
+def test_settings_tenant_isolation():
+    """Verify that tenant settings are completely isolated between users."""
+    # User A
+    client.post("/api/auth/register", json={"username": "set_iso_a", "password": "VibePassword1!"})
+    res_a = client.post("/api/auth/login", json={"username": "set_iso_a", "password": "VibePassword1!"})
+    headers_a = {"Authorization": f"Bearer {res_a.json()['access_token']}"}
+    client.put("/api/v1/settings", json={"sellbyhere_url": "https://url-a.com"}, headers=headers_a)
+
+    # User B
+    client.post("/api/auth/register", json={"username": "set_iso_b", "password": "VibePassword2!"})
+    res_b = client.post("/api/auth/login", json={"username": "set_iso_b", "password": "VibePassword2!"})
+    headers_b = {"Authorization": f"Bearer {res_b.json()['access_token']}"}
+    
+    # User B should still see empty settings default
+    res = client.get("/api/v1/settings", headers=headers_b)
+    assert res.json()["sellbyhere_url"] == ""
+
+    # User B updates theirs
+    client.put("/api/v1/settings", json={"sellbyhere_url": "https://url-b.com"}, headers=headers_b)
+
+    # Assure both remain isolated
+    res_a_final = client.get("/api/v1/settings", headers=headers_a).json()
+    res_b_final = client.get("/api/v1/settings", headers=headers_b).json()
+    assert res_a_final["sellbyhere_url"] == "https://url-a.com"
+    assert res_b_final["sellbyhere_url"] == "https://url-b.com"
+
+

@@ -3,7 +3,7 @@ import os
 import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi import FastAPI, HTTPException, status, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -119,6 +119,7 @@ def init_db(force_reset: bool = False):
 
     # If force_reset or old schema is detected, drop tables and rebuild
     if force_reset or not has_users_table or not has_user_id_column:
+        cursor.execute("DROP TABLE IF EXISTS user_settings;")
         cursor.execute("DROP TABLE IF EXISTS transactions;")
         cursor.execute("DROP TABLE IF EXISTS inventory_counts;")
         cursor.execute("DROP TABLE IF EXISTS products;")
@@ -169,6 +170,15 @@ def init_db(force_reset: bool = False):
         revenue REAL NOT NULL DEFAULT 0.0,
         transaction_date TEXT NOT NULL,
         FOREIGN KEY (sku, user_id) REFERENCES products(sku, user_id) ON DELETE CASCADE
+    );
+    """)
+
+    # 5. User Settings Table (Isolated settings like store URLs)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_settings (
+        user_id INTEGER PRIMARY KEY,
+        sellbyhere_url TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
     """)
 
@@ -792,3 +802,194 @@ def delete_product(sku: str, current_user: dict = Depends(get_current_user)):
         conn.close()
 
     return {"message": f"Successfully deleted product SKU '{sku}' and all associated history."}
+
+
+# --- WebSocket Broadcasting Setup ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[int, List[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, user_id: int):
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(websocket)
+
+    def disconnect(self, websocket: WebSocket, user_id: int):
+        if user_id in self.active_connections:
+            if websocket in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(websocket)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+
+    async def broadcast_to_user(self, user_id: int, message: dict):
+        if user_id in self.active_connections:
+            for connection in self.active_connections[user_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    pass
+
+manager = ConnectionManager()
+
+@app.websocket("/api/ws")
+async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = None):
+    if not token:
+        query_string = websocket.scope.get("query_string", b"").decode("utf-8")
+        params = dict(x.split("=") for x in query_string.split("&") if "=" in x)
+        token = params.get("token")
+
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE username = ?;", (username,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        user_id = row["id"]
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
+
+
+# --- SellByHere Order Webhook ---
+class WebhookOrderPayload(BaseModel):
+    user_id: int
+    product_id: str
+    quantity_sold: int
+    total_amount_of_sale: float
+
+@app.post("/api/v1/orders/webhook/main")
+async def orders_webhook(payload: WebhookOrderPayload, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    if payload.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant ID mismatch. You cannot submit webhooks for another user's tenant."
+        )
+
+    sku = payload.product_id.strip()
+    qty = payload.quantity_sold
+    amount = payload.total_amount_of_sale
+
+    if qty <= 0:
+        raise HTTPException(status_code=400, detail="Quantity sold must be positive.")
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="Total amount of sale cannot be negative.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Check if product exists for this user
+        cursor.execute("SELECT name, price FROM products WHERE sku = ? AND user_id = ?;", (sku, user_id))
+        prod = cursor.fetchone()
+        if not prod:
+            raise HTTPException(status_code=404, detail=f"Product with SKU '{sku}' not found for this tenant.")
+
+        # Check stock levels
+        cursor.execute("SELECT quantity FROM inventory_counts WHERE sku = ? AND user_id = ?;", (sku, user_id))
+        stock = cursor.fetchone()
+        current_qty = stock["quantity"] if stock else 0
+
+        if current_qty < qty:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for SKU '{sku}'. Available: {current_qty}, Requested: {qty}")
+
+        # Update stock
+        new_qty = current_qty - qty
+        cursor.execute(
+            "UPDATE inventory_counts SET quantity = ? WHERE sku = ? AND user_id = ?;",
+            (new_qty, sku, user_id)
+        )
+
+        # Record outbound transaction
+        cursor.execute(
+            """
+            INSERT INTO transactions (sku, user_id, type, quantity, price, revenue, transaction_date)
+            VALUES (?, ?, 'OUTBOUND', ?, ?, ?, ?);
+            """,
+            (sku, user_id, qty, amount / qty if qty > 0 else 0, amount, datetime.now().isoformat())
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error during webhook synchronization: {str(e)}")
+    finally:
+        conn.close()
+
+    # Trigger websocket broadcast to update clients
+    broadcast_data = {
+        "event": "order_synced",
+        "user_id": user_id,
+        "data": {
+            "sku": sku,
+            "product_name": prod["name"],
+            "quantity_sold": qty,
+            "total_amount": amount,
+            "new_stock": new_qty,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+    }
+    await manager.broadcast_to_user(user_id, broadcast_data)
+
+    return {"status": "success", "message": "Order synchronized successfully."}
+
+
+# --- Tenant Settings Endpoints ---
+class SettingsPayload(BaseModel):
+    sellbyhere_url: str = Field(default="", description="The URL of the user's external SellByHere store.")
+
+@app.get("/api/v1/settings")
+def get_user_settings(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT sellbyhere_url FROM user_settings WHERE user_id = ?;", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    url = row["sellbyhere_url"] if row else ""
+    return {"sellbyhere_url": url}
+
+@app.put("/api/v1/settings")
+def update_user_settings(payload: SettingsPayload, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    url = payload.sellbyhere_url.strip()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Check if settings record exists
+        cursor.execute("SELECT user_id FROM user_settings WHERE user_id = ?;", (user_id,))
+        if cursor.fetchone():
+            cursor.execute("UPDATE user_settings SET sellbyhere_url = ? WHERE user_id = ?;", (url, user_id))
+        else:
+            cursor.execute("INSERT INTO user_settings (user_id, sellbyhere_url) VALUES (?, ?);", (user_id, url))
+        conn.commit()
+    except sqlite3.Error as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update settings: {str(e)}")
+    finally:
+        conn.close()
+
+    return {"status": "success", "message": "Settings saved successfully.", "sellbyhere_url": url}
